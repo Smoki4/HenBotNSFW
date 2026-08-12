@@ -16,7 +16,7 @@ HEADERS = {
 
 def get_random_image():
     params = {
-        "IsNsfw": "False",
+        "IsNsfw": "True",
         "OrderBy": "Random",
         "PageSize": 1
     }
