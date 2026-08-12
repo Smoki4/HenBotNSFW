@@ -87,11 +87,7 @@ def post_image():
         image = get_random_image()
         send_to_discord(image)
 
-        return jsonify({
-            "ok": True,
-            "image_id": image.get("id"),
-            "url": image.get("url")
-        })
+        return "OK", 200
 
     except Exception as error:
         return jsonify({
