@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 from flask import Flask, jsonify
 
@@ -45,26 +46,50 @@ def send_to_discord(image):
     if not image_url:
         raise RuntimeError("У изображения отсутствует URL")
 
+    image_response = requests.get(
+        image_url,
+        headers=HEADERS,
+        timeout=30
+    )
+
+    image_response.raise_for_status()
+
+    content_type = image_response.headers.get(
+        "Content-Type",
+        "image/jpeg"
+    )
+
+    extension = "jpg"
+
+    if "png" in content_type:
+        extension = "png"
+    elif "webp" in content_type:
+        extension = "webp"
+    elif "gif" in content_type:
+        extension = "gif"
+
+    filename = f"anime_art.{extension}"
+
     payload = {
         "username": "Anime Poster",
-        "embeds": [
-            {
-                "title": "🌸 Random Anime Art",
-                "image": {
-                    "url": image_url
-                },
-                "color": 16745472,
-                "footer": {
-                    "text": "Random anime art • Waifu.im"
-                }
-            }
-        ]
+        "content": "🌸 Random Anime Art"
+    }
+
+    files = {
+        "file": (
+            filename,
+            image_response.content,
+            content_type
+        )
     }
 
     response = requests.post(
         WEBHOOK_URL,
-        json=payload,
-        timeout=15
+        data={
+            "payload_json": json.dumps(payload)
+        },
+        files=files,
+        timeout=30
     )
 
     response.raise_for_status()
@@ -98,4 +123,7 @@ def post_image():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
-    app.run(host="0.0.0.0", port=port)
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
