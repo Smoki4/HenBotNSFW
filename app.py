@@ -1,6 +1,8 @@
 import os
 import random
 import threading
+import time
+
 import requests
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,8 +11,9 @@ from flask import Flask, Response
 
 app = Flask(__name__)
 
+
 # =========================================================
-# ENV
+# ENVIRONMENT VARIABLES
 # =========================================================
 
 WAIFU_WEBHOOK_URL = os.environ.get(
@@ -52,7 +55,7 @@ PEXELS_API_KEY = os.environ.get(
 
 
 # =========================================================
-# API
+# API URLS
 # =========================================================
 
 WAIFU_API = (
@@ -82,13 +85,49 @@ HEADERS = {
 
 
 # =========================================================
-# GELBOORU LOCK
+# GELBOORU RATE LIMIT
 #
-# Anime и Games не отправляют запросы одновременно.
-# Это уменьшает вероятность 429.
+# Anime и Games НЕ обращаются к Gelbooru одновременно.
 # =========================================================
 
 GELBOORU_LOCK = threading.Lock()
+
+GELBOORU_MIN_INTERVAL = 3.0
+
+gelbooru_last_request = 0.0
+
+
+def gelbooru_wait():
+
+    global gelbooru_last_request
+
+    with GELBOORU_LOCK:
+
+        now = time.monotonic()
+
+        elapsed = (
+            now - gelbooru_last_request
+        )
+
+        if elapsed < GELBOORU_MIN_INTERVAL:
+
+            wait_time = (
+                GELBOORU_MIN_INTERVAL
+                - elapsed
+            )
+
+            print(
+                f"[Gelbooru] "
+                f"Пауза {wait_time:.1f} сек."
+            )
+
+            time.sleep(
+                wait_time
+            )
+
+        gelbooru_last_request = (
+            time.monotonic()
+        )
 
 
 # =========================================================
@@ -107,28 +146,37 @@ def download_image(image_url):
 
     image_data = response.content
 
-    if len(image_data) > 8 * 1024 * 1024:
+    if len(image_data) > (
+        8 * 1024 * 1024
+    ):
 
         raise RuntimeError(
-            "Image is larger than 8 MB"
+            "Изображение больше 8 MB"
         )
 
-    content_type = response.headers.get(
-        "Content-Type",
-        "image/jpeg"
+    content_type = (
+        response.headers.get(
+            "Content-Type",
+            "image/jpeg"
+        )
     )
 
     if "png" in content_type:
+
         extension = "png"
 
     elif "webp" in content_type:
+
         extension = "webp"
 
     elif "gif" in content_type:
+
         extension = "gif"
 
     else:
+
         extension = "jpg"
+
 
     filename = (
         f"anime_art.{extension}"
@@ -155,18 +203,22 @@ def send_to_discord(
     if not webhook_url:
 
         raise RuntimeError(
-            f"{source_name}: webhook not configured"
+            f"{source_name}: "
+            "webhook не настроен"
         )
 
     if not image_url:
 
         raise RuntimeError(
-            f"{source_name}: image URL missing"
+            f"{source_name}: "
+            "URL изображения отсутствует"
         )
+
 
     filename, image_data, content_type = (
         download_image(image_url)
     )
+
 
     files = {
         "file": (
@@ -175,6 +227,7 @@ def send_to_discord(
             content_type
         )
     }
+
 
     response = requests.post(
         webhook_url,
@@ -195,14 +248,17 @@ def send_to_discord(
 def post_waifu():
 
     print(
-        "[Waifu.im] Получаем изображение..."
+        "[Waifu.im] "
+        "Получаем изображение..."
     )
+
 
     params = {
         "IsNsfw": "True",
         "OrderBy": "Random",
         "PageSize": 1
     }
+
 
     response = requests.get(
         WAIFU_API,
@@ -213,6 +269,7 @@ def post_waifu():
 
     response.raise_for_status()
 
+
     data = response.json()
 
     items = data.get(
@@ -220,37 +277,47 @@ def post_waifu():
         []
     )
 
+
     if not items:
 
         raise RuntimeError(
-            "Waifu.im не вернул изображение"
+            "Waifu.im "
+            "не вернул изображение"
         )
+
 
     image_url = items[0].get(
         "url"
     )
 
+
     if not image_url:
 
         raise RuntimeError(
-            "Waifu.im не вернул URL"
+            "Waifu.im "
+            "не вернул URL"
         )
+
 
     send_to_discord(
         WAIFU_WEBHOOK_URL,
         image_url,
-        "🌸 Random Anime NSFW\n"
-        "📌 Источник: Waifu.im",
+        (
+            "🌸 Random Anime Art\n"
+            "📌 Источник: Waifu.im"
+        ),
         "Waifu.im"
     )
 
+
     print(
-        "[Waifu.im] Успешно опубликовано"
+        "[Waifu.im] "
+        "Успешно опубликовано"
     )
 
 
 # =========================================================
-# GELBOORU REQUEST
+# GELBOORU
 # =========================================================
 
 def get_gelbooru_image(
@@ -261,13 +328,16 @@ def get_gelbooru_image(
     if not GELBOORU_API_KEY:
 
         raise RuntimeError(
-            "GELBOORU_API_KEY не настроен"
+            "GELBOORU_API_KEY "
+            "не настроен"
         )
+
 
     if not GELBOORU_USER_ID:
 
         raise RuntimeError(
-            "GELBOORU_USER_ID не настроен"
+            "GELBOORU_USER_ID "
+            "не настроен"
         )
 
 
@@ -276,73 +346,76 @@ def get_gelbooru_image(
         "s": "post",
         "q": "index",
         "json": "1",
-        "limit": 20,
+
+        # Нам не нужны 100 результатов.
+        # Меньше данных = меньше нагрузки.
+        "limit": 10,
+
         "tags": tags,
+
         "api_key": GELBOORU_API_KEY,
         "user_id": GELBOORU_USER_ID
     }
 
 
-    # =====================================================
-    # ВАЖНО:
-    #
-    # Anime и Games используют общий lock.
-    # Но никакого долгого retry здесь нет.
-    # =====================================================
+    print(
+        f"[{source_name}] "
+        "Ожидание лимитера Gelbooru..."
+    )
 
-    with GELBOORU_LOCK:
 
-        try:
+    gelbooru_wait()
 
-            response = requests.get(
-                GELBOORU_API,
-                params=params,
-                headers=HEADERS,
-                timeout=15
+
+    print(
+        f"[{source_name}] "
+        "Запрос Gelbooru..."
+    )
+
+
+    try:
+
+        response = requests.get(
+            GELBOORU_API,
+            params=params,
+            headers=HEADERS,
+            timeout=15
+        )
+
+    except requests.exceptions.Timeout:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "Gelbooru timeout"
+        )
+
+
+    if response.status_code == 429:
+
+        retry_after = (
+            response.headers.get(
+                "Retry-After"
             )
+        )
 
-        except requests.exceptions.Timeout:
+        if retry_after:
 
             raise RuntimeError(
                 f"{source_name}: "
-                "Gelbooru timeout"
+                f"Gelbooru 429 "
+                f"(Retry-After "
+                f"{retry_after})"
             )
 
-
-        # =================================================
-        # RATE LIMIT
-        # =================================================
-
-        if response.status_code == 429:
-
-            retry_after = response.headers.get(
-                "Retry-After"
-            )
-
-            if retry_after:
-
-                message = (
-                    f"Gelbooru 429. "
-                    f"Retry-After: {retry_after}"
-                )
-
-            else:
-
-                message = (
-                    "Gelbooru 429 Too Many Requests"
-                )
-
-            raise RuntimeError(
-                f"{source_name}: {message}"
-            )
+        raise RuntimeError(
+            f"{source_name}: "
+            "Gelbooru 429 "
+            "Too Many Requests"
+        )
 
 
-        response.raise_for_status()
+    response.raise_for_status()
 
-
-    # =====================================================
-    # JSON
-    # =====================================================
 
     try:
 
@@ -352,7 +425,8 @@ def get_gelbooru_image(
 
         raise RuntimeError(
             f"{source_name}: "
-            "Gelbooru returned invalid JSON"
+            "Gelbooru вернул "
+            "невалидный JSON"
         )
 
 
@@ -386,10 +460,6 @@ def get_gelbooru_image(
         )
 
 
-    # =====================================================
-    # RANDOM
-    # =====================================================
-
     random.shuffle(
         posts
     )
@@ -397,15 +467,21 @@ def get_gelbooru_image(
 
     for post in posts:
 
-        image_url = post.get(
-            "file_url"
+        image_url = (
+            post.get(
+                "file_url"
+            )
         )
+
 
         if not image_url:
 
-            image_url = post.get(
-                "sample_url"
+            image_url = (
+                post.get(
+                    "sample_url"
+                )
             )
+
 
         if not image_url:
             continue
@@ -413,14 +489,19 @@ def get_gelbooru_image(
 
         return {
             "url": image_url,
-            "post_id": post.get("id"),
-            "rating": post.get("rating")
+            "post_id": post.get(
+                "id"
+            ),
+            "rating": post.get(
+                "rating"
+            )
         }
 
 
     raise RuntimeError(
         f"{source_name}: "
-        "у постов отсутствует URL"
+        "у найденных постов "
+        "нет изображения"
     )
 
 
@@ -435,9 +516,10 @@ def post_gelbooru_anime():
         "Получаем изображение..."
     )
 
+
     tags = (
-        "rating:questionable "
-        "sort:random "
+        "1girl "
+        "anime "
         "-loli "
         "-lolicon "
         "-shota "
@@ -447,25 +529,26 @@ def post_gelbooru_anime():
         "-young"
     )
 
+
     image = get_gelbooru_image(
         tags,
         "Gelbooru Anime"
     )
 
-    post_id = image.get(
-        "post_id"
-    )
 
     message = (
-        "🔥 Random Anime Art\n"
+        "🌸 Random Anime Art\n"
         "📌 Источник: Gelbooru Anime"
     )
 
-    if post_id:
+
+    if image.get("post_id"):
 
         message += (
-            f"\n🆔 Post ID: {post_id}"
+            f"\n🆔 Post ID: "
+            f"{image['post_id']}"
         )
+
 
     send_to_discord(
         GELBOORU_WEBHOOK_URL,
@@ -473,6 +556,7 @@ def post_gelbooru_anime():
         message,
         "Gelbooru Anime"
     )
+
 
     print(
         "[Gelbooru Anime] "
@@ -491,10 +575,10 @@ def post_gelbooru_games():
         "Получаем изображение..."
     )
 
+
     tags = (
-        "rating:questionable "
-        "{video_game game_character} "
-        "sort:random "
+        "video_games "
+        "game_character "
         "-loli "
         "-lolicon "
         "-shota "
@@ -504,25 +588,26 @@ def post_gelbooru_games():
         "-young"
     )
 
+
     image = get_gelbooru_image(
         tags,
         "Gelbooru Games"
     )
 
-    post_id = image.get(
-        "post_id"
-    )
 
     message = (
         "🎮 Random Game Art\n"
         "📌 Источник: Gelbooru Games"
     )
 
-    if post_id:
+
+    if image.get("post_id"):
 
         message += (
-            f"\n🆔 Post ID: {post_id}"
+            f"\n🆔 Post ID: "
+            f"{image['post_id']}"
         )
+
 
     send_to_discord(
         GELBOORU_GAMES_WEBHOOK_URL,
@@ -530,6 +615,7 @@ def post_gelbooru_games():
         message,
         "Gelbooru Games"
     )
+
 
     print(
         "[Gelbooru Games] "
@@ -549,16 +635,24 @@ def pinterest_request(
     if not PINTEREST_ACCESS_TOKEN:
 
         raise RuntimeError(
-            "PINTEREST_ACCESS_TOKEN не настроен"
+            "PINTEREST_ACCESS_TOKEN "
+            "не настроен"
         )
+
 
     headers = {
         "Authorization": (
-            f"Bearer {PINTEREST_ACCESS_TOKEN}"
+            f"Bearer "
+            f"{PINTEREST_ACCESS_TOKEN}"
         ),
-        "Content-Type": "application/json",
-        "User-Agent": "AnimePoster/1.0"
+        "Content-Type": (
+            "application/json"
+        ),
+        "User-Agent": (
+            "AnimePoster/1.0"
+        )
     }
+
 
     response = requests.get(
         f"{PINTEREST_API}{endpoint}",
@@ -566,6 +660,7 @@ def pinterest_request(
         params=params,
         timeout=20
     )
+
 
     response.raise_for_status()
 
@@ -578,20 +673,26 @@ def get_pinterest_boards():
 
     bookmark = None
 
+
     while True:
 
         params = {
             "page_size": 100
         }
 
+
         if bookmark:
 
-            params["bookmark"] = bookmark
+            params[
+                "bookmark"
+            ] = bookmark
+
 
         data = pinterest_request(
             "/boards",
             params=params
         )
+
 
         boards.extend(
             data.get(
@@ -600,15 +701,19 @@ def get_pinterest_boards():
             )
         )
 
+
         bookmark = data.get(
             "bookmark"
         )
 
+
         if not bookmark:
             break
 
+
         if len(boards) >= 500:
             break
+
 
     return boards
 
@@ -621,20 +726,26 @@ def get_board_pins(
 
     bookmark = None
 
+
     while True:
 
         params = {
             "page_size": 100
         }
 
+
         if bookmark:
 
-            params["bookmark"] = bookmark
+            params[
+                "bookmark"
+            ] = bookmark
+
 
         data = pinterest_request(
             f"/boards/{board_id}/pins",
             params=params
         )
+
 
         pins.extend(
             data.get(
@@ -643,15 +754,19 @@ def get_board_pins(
             )
         )
 
+
         bookmark = data.get(
             "bookmark"
         )
 
+
         if not bookmark:
             break
 
+
         if len(pins) >= 1000:
             break
+
 
     return pins
 
@@ -663,104 +778,125 @@ def post_pinterest():
         "Получаем изображение..."
     )
 
-    boards = get_pinterest_boards()
+
+    boards = (
+        get_pinterest_boards()
+    )
+
 
     if not boards:
 
         raise RuntimeError(
-            "Pinterest: доски не найдены"
+            "Pinterest: "
+            "доски не найдены"
         )
 
-    board = random.choice(
+
+    # Выбираем случайную доску.
+    random.shuffle(
         boards
     )
 
-    board_id = board.get(
-        "id"
-    )
 
-    board_name = board.get(
-        "name",
-        "Pinterest"
-    )
+    for board in boards:
 
-    if not board_id:
-
-        raise RuntimeError(
-            "Pinterest: board ID отсутствует"
+        board_id = board.get(
+            "id"
         )
 
-    pins = get_board_pins(
-        board_id
-    )
+        if not board_id:
+            continue
 
-    if not pins:
 
-        raise RuntimeError(
-            "Pinterest: в выбранной "
-            "доске нет Pins"
+        board_name = board.get(
+            "name",
+            "Pinterest"
         )
 
-    random.shuffle(
-        pins
-    )
 
-    image_url = None
+        try:
 
-    for pin in pins:
-
-        media = pin.get(
-            "media",
-            {}
-        )
-
-        images = media.get(
-            "images",
-            {}
-        )
-
-        for image_data in (
-            images.values()
-        ):
-
-            if not isinstance(
-                image_data,
-                dict
-            ):
-                continue
-
-            url = image_data.get(
-                "url"
+            pins = get_board_pins(
+                board_id
             )
 
-            if url:
+        except Exception as error:
 
-                image_url = url
-                break
+            print(
+                f"[Pinterest] "
+                f"Ошибка доски "
+                f"{board_name}: "
+                f"{error}"
+            )
 
-        if image_url:
-            break
+            continue
 
 
-    if not image_url:
-
-        raise RuntimeError(
-            "Pinterest: "
-            "изображение не найдено"
+        random.shuffle(
+            pins
         )
 
 
-    send_to_discord(
-        PINTEREST_WEBHOOK_URL,
-        image_url,
-        "📌 Random Pinterest Art\n"
-        f"📁 Доска: {board_name}",
-        "Pinterest"
-    )
+        for pin in pins:
 
-    print(
-        "[Pinterest] "
-        "Успешно опубликовано"
+            media = pin.get(
+                "media",
+                {}
+            )
+
+
+            images = media.get(
+                "images",
+                {}
+            )
+
+
+            for image_data in (
+                images.values()
+            ):
+
+                if not isinstance(
+                    image_data,
+                    dict
+                ):
+                    continue
+
+
+                image_url = (
+                    image_data.get(
+                        "url"
+                    )
+                )
+
+
+                if not image_url:
+                    continue
+
+
+                send_to_discord(
+                    PINTEREST_WEBHOOK_URL,
+                    image_url,
+                    (
+                        "📌 Random "
+                        "Pinterest Art\n"
+                        f"📁 Доска: "
+                        f"{board_name}"
+                    ),
+                    "Pinterest"
+                )
+
+
+                print(
+                    "[Pinterest] "
+                    "Успешно опубликовано"
+                )
+
+                return
+
+
+    raise RuntimeError(
+        "Pinterest: "
+        "изображение не найдено"
     )
 
 
@@ -775,15 +911,22 @@ def post_pexels():
         "Получаем изображение..."
     )
 
+
     if not PEXELS_API_KEY:
 
         raise RuntimeError(
-            "PEXELS_API_KEY не настроен"
+            "PEXELS_API_KEY "
+            "не настроен"
         )
 
+
     headers = {
-        "Authorization": PEXELS_API_KEY,
-        "User-Agent": "AnimePoster/1.0"
+        "Authorization": (
+            PEXELS_API_KEY
+        ),
+        "User-Agent": (
+            "AnimePoster/1.0"
+        )
     }
 
 
@@ -794,6 +937,7 @@ def post_pexels():
         "woman model",
         "beautiful woman"
     ]
+
 
     query = random.choice(
         queries
@@ -817,19 +961,24 @@ def post_pexels():
         timeout=20
     )
 
+
     response.raise_for_status()
 
+
     data = response.json()
+
 
     photos = data.get(
         "photos",
         []
     )
 
+
     if not photos:
 
         raise RuntimeError(
-            "Pexels не вернул изображения"
+            "Pexels "
+            "не вернул изображения"
         )
 
 
@@ -837,10 +986,12 @@ def post_pexels():
         photos
     )
 
+
     src = photo.get(
         "src",
         {}
     )
+
 
     image_url = (
         src.get("original")
@@ -848,20 +999,25 @@ def post_pexels():
         or src.get("large")
     )
 
+
     if not image_url:
 
         raise RuntimeError(
-            "Pexels: URL отсутствует"
+            "Pexels: "
+            "URL изображения отсутствует"
         )
 
 
     send_to_discord(
         PEXELS_WEBHOOK_URL,
         image_url,
-        "📷 Random IRL Art\n"
-        "📌 Источник: Pexels",
+        (
+            "📷 Random IRL Art\n"
+            "📌 Источник: Pexels"
+        ),
         "Pexels"
     )
+
 
     print(
         "[Pexels] "
@@ -870,7 +1026,47 @@ def post_pexels():
 
 
 # =========================================================
-# STATUS
+# SOURCE WRAPPER
+# =========================================================
+
+def run_source(
+    source_name,
+    function
+):
+
+    try:
+
+        function()
+
+        return (
+            source_name,
+            True,
+            None
+        )
+
+    except Exception as error:
+
+        error_text = str(
+            error
+        )
+
+
+        print(
+            f"[{source_name}] "
+            f"ОШИБКА: "
+            f"{error_text}"
+        )
+
+
+        return (
+            source_name,
+            False,
+            error_text
+        )
+
+
+# =========================================================
+# HOME
 # =========================================================
 
 @app.route("/")
@@ -883,6 +1079,10 @@ def home():
     )
 
 
+# =========================================================
+# PING
+# =========================================================
+
 @app.route("/ping")
 def ping():
 
@@ -893,16 +1093,15 @@ def ping():
     )
 
 
+# =========================================================
+# STATUS
+# =========================================================
+
 @app.route("/status")
 def status():
 
-    lines = [
-        "Anime Poster status:",
-        ""
-    ]
-
-
     sources = {
+
         "Waifu.im": bool(
             WAIFU_WEBHOOK_URL
         ),
@@ -931,6 +1130,12 @@ def status():
     }
 
 
+    lines = [
+        "Anime Poster status:",
+        ""
+    ]
+
+
     for name, enabled in (
         sources.items()
     ):
@@ -956,49 +1161,13 @@ def status():
 
 
 # =========================================================
-# RUN ONE SOURCE SAFELY
-# =========================================================
-
-def run_source(
-    source_name,
-    function
-):
-
-    try:
-
-        function()
-
-        return (
-            source_name,
-            True,
-            None
-        )
-
-    except Exception as error:
-
-        error_text = str(
-            error
-        )
-
-        print(
-            f"[{source_name}] "
-            f"ОШИБКА: {error_text}"
-        )
-
-        return (
-            source_name,
-            False,
-            error_text
-        )
-
-
-# =========================================================
 # POST
 #
-# ВСЕ источники запускаются независимо.
+# Waifu / Pexels / Pinterest / Gelbooru
+# запускаются независимо.
 #
-# Если Gelbooru завис/получил 429,
-# Pexels и Waifu НЕ ждут его.
+# Gelbooru Anime и Games внутри
+# используют общий rate limiter.
 # =========================================================
 
 @app.route("/post")
@@ -1015,10 +1184,6 @@ def post_image():
     jobs = []
 
 
-    # =====================================================
-    # WAIFU
-    # =====================================================
-
     if WAIFU_WEBHOOK_URL:
 
         jobs.append(
@@ -1028,10 +1193,6 @@ def post_image():
             )
         )
 
-
-    # =====================================================
-    # GELBOORU ANIME
-    # =====================================================
 
     if (
         GELBOORU_API_KEY
@@ -1047,10 +1208,6 @@ def post_image():
         )
 
 
-    # =====================================================
-    # GELBOORU GAMES
-    # =====================================================
-
     if (
         GELBOORU_API_KEY
         and GELBOORU_USER_ID
@@ -1065,10 +1222,6 @@ def post_image():
         )
 
 
-    # =====================================================
-    # PINTEREST
-    # =====================================================
-
     if (
         PINTEREST_ACCESS_TOKEN
         and PINTEREST_WEBHOOK_URL
@@ -1081,10 +1234,6 @@ def post_image():
             )
         )
 
-
-    # =====================================================
-    # PEXELS
-    # =====================================================
 
     if (
         PEXELS_API_KEY
@@ -1109,21 +1258,20 @@ def post_image():
 
 
     successful = []
+
     failed = []
 
 
     # =====================================================
-    # ПАРАЛЛЕЛЬНЫЙ ЗАПУСК
+    # INDEPENDENT THREADS
     # =====================================================
 
-    max_workers = len(jobs)
-
-
     with ThreadPoolExecutor(
-        max_workers=max_workers
+        max_workers=len(jobs)
     ) as executor:
 
         futures = {}
+
 
         for source_name, function in jobs:
 
@@ -1133,9 +1281,10 @@ def post_image():
                 function
             )
 
-            futures[future] = (
-                source_name
-            )
+
+            futures[
+                future
+            ] = source_name
 
 
         for future in as_completed(
@@ -1146,11 +1295,13 @@ def post_image():
                 future
             ]
 
+
             try:
 
                 name, success, error = (
                     future.result()
                 )
+
 
                 if success:
 
@@ -1167,6 +1318,7 @@ def post_image():
                         )
                     )
 
+
             except Exception as error:
 
                 failed.append(
@@ -1178,12 +1330,10 @@ def post_image():
 
 
     # =====================================================
-    # LOG
+    # RESULT
     # =====================================================
 
-    print(
-        "=" * 55
-    )
+    print("=" * 55)
 
     print(
         "POST: публикация завершена"
@@ -1203,26 +1353,23 @@ def post_image():
     for name, error in failed:
 
         print(
-            f"POST: {name}: {error}"
+            f"POST: {name}: "
+            f"{error}"
         )
 
 
-    print(
-        "=" * 55
-    )
+    print("=" * 55)
 
-
-    # =====================================================
-    # HTTP RESPONSE
-    # =====================================================
 
     if successful:
 
         return Response(
             (
                 "OK - "
-                f"successful: {len(successful)}, "
-                f"errors: {len(failed)}"
+                f"successful: "
+                f"{len(successful)}, "
+                f"errors: "
+                f"{len(failed)}"
             ),
             status=200,
             mimetype="text/plain"
@@ -1237,7 +1384,7 @@ def post_image():
 
 
 # =========================================================
-# START
+# START SERVER
 # =========================================================
 
 if __name__ == "__main__":
@@ -1248,6 +1395,7 @@ if __name__ == "__main__":
             "8080"
         )
     )
+
 
     app.run(
         host="0.0.0.0",
