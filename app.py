@@ -8,11 +8,14 @@ from flask import Flask, Response
 
 app = Flask(__name__)
 
+
 # =========================================================
-# НАСТРОЙКИ
+# ENV
 # =========================================================
 
-WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
+WAIFU_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_WAIFU"
+)
 
 DANBOORU_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_DANBOORU"
@@ -22,12 +25,12 @@ DANBOORU_GAMES_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_DANBOORU_GAMES"
 )
 
-PINTEREST_WEBHOOK_URL = os.environ.get(
-    "DISCORD_WEBHOOK_PINTEREST"
-)
-
 PEXELS_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_PEXELS"
+)
+
+PINTEREST_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_PINTEREST"
 )
 
 DANBOORU_USERNAME = os.environ.get(
@@ -67,7 +70,7 @@ PINTEREST_API = (
 
 
 # =========================================================
-# HTTP HEADERS
+# HEADERS
 # =========================================================
 
 HEADERS = {
@@ -75,16 +78,9 @@ HEADERS = {
 }
 
 
-# Danbooru требует уникальный User-Agent.
-# Если знаешь свой числовой ID, можешь добавить его:
-#
-# AnimePoster/1.0 (user #123456)
-#
-# Username оставляем для идентификации бота.
-
 DANBOORU_HEADERS = {
     "User-Agent": (
-        f"AnimePoster/1.0 "
+        "AnimePoster/1.0 "
         f"(user {DANBOORU_USERNAME or 'unknown'})"
     ),
     "Accept": "application/json"
@@ -92,11 +88,8 @@ DANBOORU_HEADERS = {
 
 
 # =========================================================
-# DANBOORU LIMITER
+# DANBOORU RATE LIMITER
 # =========================================================
-
-# Не делаем частые запросы к Danbooru.
-# Один запрос примерно раз в 1.2 секунды.
 
 DANBOORU_LOCK = threading.Lock()
 
@@ -169,9 +162,7 @@ def get_random_waifu():
             "Waifu.im не вернул изображение"
         )
 
-    image = items[0]
-
-    image_url = image.get(
+    image_url = items[0].get(
         "url"
     )
 
@@ -210,39 +201,141 @@ def get_random_danbooru(
 
     print(
         f"[{source_name}] "
-        f"Получаем изображение..."
+        "Получаем изображение..."
     )
 
     danbooru_wait()
 
     params = {
-        "login": DANBOORU_USERNAME,
-        "api_key": DANBOORU_API_KEY,
-
-        # Получаем несколько результатов,
-        # затем случайно выбираем один.
         "limit": 20,
-
         "tags": tags
     }
 
-    response = requests.get(
-        f"{DANBOORU_API}/posts.json",
-        params=params,
-        headers=DANBOORU_HEADERS,
-        timeout=25
+    try:
+
+        response = requests.get(
+            f"{DANBOORU_API}/posts.json",
+            params=params,
+
+            # ВАЖНО:
+            # Danbooru поддерживает Basic Auth.
+            auth=(
+                DANBOORU_USERNAME,
+                DANBOORU_API_KEY
+            ),
+
+            headers=DANBOORU_HEADERS,
+            timeout=30
+        )
+
+    except requests.exceptions.Timeout:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "таймаут Danbooru"
+        )
+
+    except requests.exceptions.RequestException as error:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            f"ошибка соединения: {error}"
+        )
+
+    print(
+        f"[{source_name}] "
+        f"Danbooru HTTP: "
+        f"{response.status_code}"
     )
+
+    # -----------------------------------------------------
+    # 429
+    # -----------------------------------------------------
 
     if response.status_code == 429:
 
         raise RuntimeError(
             f"{source_name}: "
-            "Danbooru HTTP 429"
+            "Danbooru HTTP 429 "
+            "Too Many Requests"
         )
 
-    response.raise_for_status()
+    # -----------------------------------------------------
+    # 401
+    # -----------------------------------------------------
 
-    data = response.json()
+    if response.status_code == 401:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "Danbooru HTTP 401. "
+            "Проверь DANBOORU_USERNAME "
+            "и DANBOORU_API_KEY."
+        )
+
+    # -----------------------------------------------------
+    # 403
+    # -----------------------------------------------------
+
+    if response.status_code == 403:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "Danbooru HTTP 403. "
+            "API key не имеет нужного доступа."
+        )
+
+    # -----------------------------------------------------
+    # 422
+    # -----------------------------------------------------
+
+    if response.status_code == 422:
+
+        # Выводим тело ответа, но НЕ API key.
+        body = response.text[:1000]
+
+        print(
+            f"[{source_name}] "
+            f"Danbooru 422 response:"
+        )
+
+        print(body)
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "Danbooru HTTP 422. "
+            f"Ответ: {body[:300]}"
+        )
+
+    # -----------------------------------------------------
+    # Остальные HTTP ошибки
+    # -----------------------------------------------------
+
+    if response.status_code != 200:
+
+        body = response.text[:500]
+
+        raise RuntimeError(
+            f"{source_name}: "
+            f"Danbooru HTTP "
+            f"{response.status_code}: "
+            f"{body}"
+        )
+
+    # -----------------------------------------------------
+    # JSON
+    # -----------------------------------------------------
+
+    try:
+
+        data = response.json()
+
+    except ValueError:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "Danbooru вернул не JSON"
+        )
 
     if not isinstance(
         data,
@@ -257,9 +350,6 @@ def get_random_danbooru(
     valid_images = []
 
     for post in data:
-
-        # У Danbooru могут быть разные
-        # варианты файлов.
 
         image_url = (
             post.get("large_file_url")
@@ -279,12 +369,22 @@ def get_random_danbooru(
 
         raise RuntimeError(
             f"{source_name}: "
-            "Danbooru не вернул изображения"
+            "Danbooru не вернул "
+            "подходящих изображений"
         )
 
-    return random.choice(
+    selected = random.choice(
         valid_images
     )
+
+    print(
+        f"[{source_name}] "
+        f"Изображение получено. "
+        f"Post ID: "
+        f"{selected.get('post_id')}"
+    )
+
+    return selected
 
 
 # =========================================================
@@ -293,15 +393,15 @@ def get_random_danbooru(
 
 def get_danbooru_anime():
 
+    # Сначала используем простой запрос,
+    # чтобы проверить работу API.
+    #
+    # Если этот вариант заработает,
+    # потом можно ужесточить фильтр.
+
     tags = (
-        "rating:e "
-        "-loli "
-        "-lolicon "
-        "-shota "
-        "-shotacon "
-        "-child "
-        "-minor "
-        "-young"
+        "1girl "
+        "rating:s"
     )
 
     return get_random_danbooru(
@@ -317,16 +417,9 @@ def get_danbooru_anime():
 def get_danbooru_games():
 
     tags = (
-        "rating:e "
+        "1girl "
         "video_games "
-        "game_character "
-        "-loli "
-        "-lolicon "
-        "-shota "
-        "-shotacon "
-        "-child "
-        "-minor "
-        "-young"
+        "rating:s"
     )
 
     return get_random_danbooru(
@@ -359,7 +452,10 @@ def get_random_pexels():
     params = {
         "query": "adult woman fashion",
         "per_page": 80,
-        "page": random.randint(1, 10)
+        "page": random.randint(
+            1,
+            10
+        )
     }
 
     response = requests.get(
@@ -466,12 +562,12 @@ def get_pinterest_boards():
             params
         )
 
-        items = data.get(
-            "items",
-            []
+        boards.extend(
+            data.get(
+                "items",
+                []
+            )
         )
-
-        boards.extend(items)
 
         bookmark = data.get(
             "bookmark"
@@ -511,12 +607,12 @@ def get_board_pins(
             params
         )
 
-        items = data.get(
-            "items",
-            []
+        pins.extend(
+            data.get(
+                "items",
+                []
+            )
         )
-
-        pins.extend(items)
 
         bookmark = data.get(
             "bookmark"
@@ -575,43 +671,41 @@ def get_random_pinterest_pin():
                     {}
                 )
 
-                image_url = None
-
                 for image_data in (
                     images.values()
                 ):
 
-                    if isinstance(
+                    if not isinstance(
                         image_data,
                         dict
                     ):
+                        continue
 
-                        url = image_data.get(
-                            "url"
-                        )
+                    image_url = image_data.get(
+                        "url"
+                    )
 
-                        if url:
+                    if image_url:
 
-                            image_url = url
-                            break
+                        all_pins.append({
+                            "url": image_url,
+                            "source":
+                                "Pinterest",
+                            "board_name":
+                                board_name,
+                            "pin_id":
+                                pin.get("id")
+                        })
 
-                if image_url:
-
-                    all_pins.append({
-                        "url": image_url,
-                        "source": "Pinterest",
-                        "board_name":
-                            board_name,
-                        "pin_id":
-                            pin.get("id")
-                    })
+                        break
 
         except Exception as error:
 
             print(
                 f"[Pinterest] "
                 f"Ошибка доски "
-                f"{board_name}: {error}"
+                f"{board_name}: "
+                f"{error}"
             )
 
     if not all_pins:
@@ -743,14 +837,8 @@ def send_to_discord(
             PINTEREST_WEBHOOK_URL
         )
 
-        board_name = image.get(
-            "board_name",
-            "Pinterest"
-        )
-
         message = (
-            "📌 Random Pinterest Art\n"
-            f"📁 Доска: {board_name}"
+            "📌 Random Pinterest Art"
         )
 
     else:
@@ -806,7 +894,7 @@ def send_to_discord(
 
 
 # =========================================================
-# INDEPENDENT SOURCE WORKER
+# PUBLISH
 # =========================================================
 
 def publish_source(
@@ -836,7 +924,8 @@ def publish_source(
     except Exception as error:
 
         print(
-            f"[{name}] ОШИБКА: {error}"
+            f"[{name}] ОШИБКА: "
+            f"{error}"
         )
 
         return {
@@ -848,8 +937,6 @@ def publish_source(
 
 # =========================================================
 # POST
-#
-# Каждый источник работает НЕЗАВИСИМО.
 # =========================================================
 
 @app.route("/post")
@@ -938,13 +1025,6 @@ def post_image():
 
     results = []
 
-    # =====================================================
-    # ПОСЛЕДОВАТЕЛЬНО
-    #
-    # Это специально:
-    # Danbooru имеет собственный rate limit.
-    # =====================================================
-
     for name, getter in sources:
 
         result = publish_source(
@@ -962,7 +1042,10 @@ def post_image():
         if result["success"]
     )
 
-    errors = len(results) - successful
+    errors = (
+        len(results)
+        - successful
+    )
 
     print(
         "======================================================="
@@ -973,11 +1056,13 @@ def post_image():
     )
 
     print(
-        f"POST: успешно: {successful}"
+        f"POST: успешно: "
+        f"{successful}"
     )
 
     print(
-        f"POST: ошибок: {errors}"
+        f"POST: ошибок: "
+        f"{errors}"
     )
 
     for result in results:
@@ -993,11 +1078,6 @@ def post_image():
     print(
         "======================================================="
     )
-
-    # ВАЖНО:
-    # /post возвращает 200 даже если один источник
-    # временно упал. Поэтому cron-job.org не будет
-    # считать весь запуск неудачным.
 
     return Response(
         f"OK - successful: "
