@@ -16,6 +16,7 @@ PINTEREST_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PINTEREST")
 PINTEREST_ACCESS_TOKEN = os.environ.get("PINTEREST_ACCESS_TOKEN")
 
 WAIFU_API = "https://api.waifu.im/images"
+WAIFU_PICS_API = "https://api.waifu.pics/nsfw/waifu"
 PINTEREST_API = "https://api.pinterest.com/v5"
 
 HEADERS = {
@@ -71,6 +72,35 @@ def get_random_waifu():
     return {
         "url": image_url,
         "source": "Waifu.im"
+    }
+
+
+# =========================================================
+# WAIFU.PICS
+# =========================================================
+
+def get_random_waifu_pics():
+
+    response = requests.get(
+        WAIFU_PICS_API,
+        headers=HEADERS,
+        timeout=15
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    image_url = data.get("url")
+
+    if not image_url:
+        raise RuntimeError(
+            "Waifu.pics не вернул URL изображения"
+        )
+
+    return {
+        "url": image_url,
+        "source": "Waifu.pics"
     }
 
 
@@ -327,8 +357,10 @@ def send_to_discord(image):
         "Unknown"
     )
 
-    # Выбираем webhook в зависимости
-    # от источника изображения
+    # -----------------------------------------------------
+    # WAIFU.IM
+    # -----------------------------------------------------
+
     if source == "Waifu.im":
 
         webhook_url = WAIFU_WEBHOOK_URL
@@ -338,7 +370,32 @@ def send_to_discord(image):
                 "DISCORD_WEBHOOK_WAIFU не настроен"
             )
 
-        message = "🌸 Random Anime Art\n📌 Источник: Waifu.im"
+        message = (
+            "🌸 Random Anime Art\n"
+            "📌 Источник: Waifu.im"
+        )
+
+    # -----------------------------------------------------
+    # WAIFU.PICS
+    # -----------------------------------------------------
+
+    elif source == "Waifu.pics":
+
+        webhook_url = WAIFU_WEBHOOK_URL
+
+        if not webhook_url:
+            raise RuntimeError(
+                "DISCORD_WEBHOOK_WAIFU не настроен"
+            )
+
+        message = (
+            "🌸 Random Anime Art\n"
+            "📌 Источник: Waifu.pics"
+        )
+
+    # -----------------------------------------------------
+    # PINTEREST
+    # -----------------------------------------------------
 
     elif source == "Pinterest":
 
@@ -396,6 +453,31 @@ def send_to_discord(image):
 
 
 # =========================================================
+# ПОЛУЧЕНИЕ ИЗОБРАЖЕНИЯ ИЗ ИСТОЧНИКА
+# =========================================================
+
+def get_image_from_source(source):
+
+    if source == "waifu":
+
+        return get_random_waifu()
+
+    elif source == "waifu_pics":
+
+        return get_random_waifu_pics()
+
+    elif source == "pinterest":
+
+        return get_random_pinterest_pin()
+
+    else:
+
+        raise RuntimeError(
+            f"Неизвестный источник: {source}"
+        )
+
+
+# =========================================================
 # ГЛАВНАЯ
 # =========================================================
 
@@ -426,8 +508,14 @@ def ping():
 # =========================================================
 # POST
 #
-# 50% Waifu.im
-# 50% Pinterest
+# Доступные источники:
+#
+# Waifu.im      → NSFW
+# Waifu.pics    → NSFW
+# Pinterest     → Pinterest
+#
+# При ошибке одного источника
+# автоматически пробуется следующий.
 # =========================================================
 
 @app.route("/post")
@@ -435,29 +523,31 @@ def post_image():
 
     try:
 
-        # Проверяем наличие хотя бы одного webhook
-        if (
-            not WAIFU_WEBHOOK_URL
-            and not PINTEREST_WEBHOOK_URL
-        ):
+        # -------------------------------------------------
+        # СОБИРАЕМ ДОСТУПНЫЕ ИСТОЧНИКИ
+        # -------------------------------------------------
 
-            return Response(
-                "No Discord webhooks configured",
-                status=500,
-                mimetype="text/plain"
-            )
-
-        # Проверяем доступные источники
         sources = []
 
+        # Waifu.im
         if WAIFU_WEBHOOK_URL:
             sources.append("waifu")
 
+        # Waifu.pics использует тот же
+        # Discord webhook, что и Waifu.im
+        if WAIFU_WEBHOOK_URL:
+            sources.append("waifu_pics")
+
+        # Pinterest
         if (
             PINTEREST_WEBHOOK_URL
             and PINTEREST_ACCESS_TOKEN
         ):
             sources.append("pinterest")
+
+        # -------------------------------------------------
+        # ПРОВЕРКА
+        # -------------------------------------------------
 
         if not sources:
 
@@ -467,93 +557,88 @@ def post_image():
                 mimetype="text/plain"
             )
 
-        # Случайный источник
-        source = random.choice(sources)
+        # -------------------------------------------------
+        # ПЕРЕМЕШИВАЕМ ИСТОЧНИКИ
+        #
+        # Первый будет случайным.
+        # Остальные используются как fallback.
+        # -------------------------------------------------
+
+        random.shuffle(sources)
 
         print(
-            f"POST: выбран источник: {source}"
+            f"POST: порядок источников: {sources}"
         )
 
-        # =================================================
-        # WAIFU
-        # =================================================
+        # -------------------------------------------------
+        # ПРОБУЕМ ИСТОЧНИКИ ПО ОЧЕРЕДИ
+        # -------------------------------------------------
 
-        if source == "waifu":
+        last_error = None
+
+        for source in sources:
 
             try:
 
-                image = get_random_waifu()
+                print(
+                    f"POST: пробуем источник: {source}"
+                )
+
+                image = get_image_from_source(
+                    source
+                )
+
+                print(
+                    f"POST: найдено изображение "
+                    f"из {image.get('source')}"
+                )
+
+                # Отправляем в Discord
+                send_to_discord(image)
+
+                print(
+                    "POST: отправлено в Discord"
+                )
+
+                return Response(
+                    "OK",
+                    status=200,
+                    mimetype="text/plain"
+                )
 
             except Exception as error:
 
-                print(
-                    f"Waifu.im ошибка: {error}"
-                )
-
-                # Если Pinterest доступен,
-                # пробуем его
-                if "pinterest" in sources:
-
-                    print(
-                        "Пробуем Pinterest..."
-                    )
-
-                    image = (
-                        get_random_pinterest_pin()
-                    )
-
-                else:
-
-                    raise
-
-        # =================================================
-        # PINTEREST
-        # =================================================
-
-        else:
-
-            try:
-
-                image = get_random_pinterest_pin()
-
-            except Exception as error:
+                last_error = error
 
                 print(
-                    f"Pinterest ошибка: {error}"
+                    f"POST: источник {source} "
+                    f"не сработал: {error}"
                 )
 
-                # Если Waifu доступен,
-                # пробуем его
-                if "waifu" in sources:
+                print(
+                    "POST: пробуем следующий источник..."
+                )
 
-                    print(
-                        "Пробуем Waifu.im..."
-                    )
+                continue
 
-                    image = get_random_waifu()
-
-                else:
-
-                    raise
+        # -------------------------------------------------
+        # ЕСЛИ НИ ОДИН ИСТОЧНИК НЕ СРАБОТАЛ
+        # -------------------------------------------------
 
         print(
-            f"POST: найдено изображение "
-            f"из {image.get('source')}"
+            f"POST: все источники завершились ошибкой: "
+            f"{last_error}"
         )
 
-        # Отправляем в соответствующий канал
-        send_to_discord(image)
-
-        print(
-            "POST: отправлено в Discord"
-        )
-
-        # Маленький ответ для cron-job.org
         return Response(
-            "OK",
-            status=200,
+            "All image sources failed",
+            status=502,
             mimetype="text/plain"
         )
+
+    # -----------------------------------------------------
+    # TIMEOUT
+    # -----------------------------------------------------
 
     except requests.exceptions.Timeout:
 
@@ -567,6 +652,10 @@ def post_image():
             mimetype="text/plain"
         )
 
+    # -----------------------------------------------------
+    # HTTP ERROR
+    # -----------------------------------------------------
+
     except requests.exceptions.HTTPError as error:
 
         print(
@@ -578,6 +667,10 @@ def post_image():
             status=502,
             mimetype="text/plain"
         )
+
+    # -----------------------------------------------------
+    # ОБЩАЯ ОШИБКА
+    # -----------------------------------------------------
 
     except Exception as error:
 
