@@ -35,6 +35,7 @@ PEXELS_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_PEXELS"
 )
 
+
 GELBOORU_API_KEY = os.environ.get(
     "GELBOORU_API_KEY"
 )
@@ -83,9 +84,7 @@ HEADERS = {
 
 
 # =========================================================
-# GELBOORU REQUEST LOCK
-#
-# Только один запрос к Gelbooru одновременно.
+# GELBOORU LIMITER
 # =========================================================
 
 GELBOORU_LOCK = threading.Lock()
@@ -302,7 +301,7 @@ def post_waifu():
 
 
 # =========================================================
-# GELBOORU
+# GELBOORU API
 # =========================================================
 
 def get_gelbooru_image(
@@ -347,21 +346,12 @@ def get_gelbooru_image(
         "Запрос Gelbooru..."
     )
 
-    try:
-
-        response = requests.get(
-            GELBOORU_API,
-            params=params,
-            headers=HEADERS,
-            timeout=15
-        )
-
-    except requests.exceptions.Timeout:
-
-        raise RuntimeError(
-            f"{source_name}: "
-            "Gelbooru timeout"
-        )
+    response = requests.get(
+        GELBOORU_API,
+        params=params,
+        headers=HEADERS,
+        timeout=15
+    )
 
     if response.status_code == 429:
 
@@ -385,14 +375,20 @@ def get_gelbooru_image(
             "невалидный JSON"
         )
 
-    if isinstance(data, dict):
+    if isinstance(
+        data,
+        dict
+    ):
 
         posts = data.get(
             "post",
             []
         )
 
-    elif isinstance(data, list):
+    elif isinstance(
+        data,
+        list
+    ):
 
         posts = data
 
@@ -404,7 +400,8 @@ def get_gelbooru_image(
 
         raise RuntimeError(
             f"{source_name}: "
-            "Gelbooru не вернул постов"
+            "Gelbooru не вернул "
+            "постов"
         )
 
     for post in posts:
@@ -583,6 +580,7 @@ def pinterest_request(
 def get_pinterest_boards():
 
     boards = []
+
     bookmark = None
 
     while True:
@@ -627,6 +625,7 @@ def get_board_pins(
 ):
 
     pins = []
+
     bookmark = None
 
     while True:
@@ -790,20 +789,8 @@ def post_pexels():
         "User-Agent": "AnimePoster/1.0"
     }
 
-    queries = [
-        "woman portrait",
-        "adult woman portrait",
-        "fashion woman",
-        "woman model",
-        "beautiful woman"
-    ]
-
     params = {
-        "query": queries[
-            int(
-                time.time()
-            ) % len(queries)
-        ],
+        "query": "woman portrait",
         "per_page": 20
     }
 
@@ -869,7 +856,7 @@ def post_pexels():
 
 
 # =========================================================
-# RUN SOURCE
+# SOURCE WRAPPER
 # =========================================================
 
 def run_source(
@@ -977,13 +964,14 @@ def status():
 
     for name, enabled in sources.items():
 
+        prefix = (
+            "✓ "
+            if enabled
+            else "✗ "
+        )
+
         lines.append(
-            (
-                "✓ "
-                if enabled
-                else "✗ "
-            )
-            + name
+            prefix + name
         )
 
     return Response(
@@ -994,10 +982,11 @@ def status():
 
 
 # =========================================================
-# TEST GELBOORU
+# GELBOORU DIAGNOSTIC TEST
 #
-# Этот endpoint делает ОДИН запрос.
-# Нужен для диагностики 429.
+# Делает только ОДИН запрос.
+#
+# API KEY НИКОГДА НЕ ВЫВОДИМ.
 # =========================================================
 
 @app.route("/test-gelbooru")
@@ -1032,6 +1021,19 @@ def test_gelbooru():
             "user_id": GELBOORU_USER_ID
         }
 
+        diagnostic_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 "
+                "Chrome/150.0 Safari/537.36"
+            ),
+            "Accept": (
+                "application/json,"
+                "text/plain,*/*"
+            )
+        }
+
         print(
             "[Gelbooru TEST] "
             "Отправляем одиночный запрос..."
@@ -1040,43 +1042,68 @@ def test_gelbooru():
         response = requests.get(
             GELBOORU_API,
             params=params,
-            headers=HEADERS,
+            headers=diagnostic_headers,
             timeout=15
         )
 
         print(
-            "[Gelbooru TEST] HTTP:",
+            "[Gelbooru TEST] STATUS:",
             response.status_code
         )
 
         print(
-            "[Gelbooru TEST] "
-            "Response:",
-            response.text[:1000]
+            "[Gelbooru TEST] HEADERS:"
         )
 
-        # ВАЖНО:
-        # API key не выводим в ответ пользователю.
+        for key, value in (
+            response.headers.items()
+        ):
 
-        if response.status_code == 429:
+            # Не выводим ничего похожего
+            # на секреты.
+            if key.lower() in [
+                "authorization",
+                "cookie",
+                "set-cookie"
+            ]:
+                continue
 
-            return Response(
-                (
-                    "Gelbooru HTTP 429\n\n"
-                    "API запрос был отклонён "
-                    "сервером Gelbooru.\n"
-                    "Проверь Render Logs для "
-                    "деталей."
-                ),
-                status=200,
-                mimetype="text/plain"
+            print(
+                f"  {key}: {value}"
             )
+
+        print(
+            "[Gelbooru TEST] BODY:"
+        )
+
+        print(
+            response.text[:3000]
+        )
+
+        retry_after = (
+            response.headers.get(
+                "Retry-After"
+            )
+        )
+
+        server = (
+            response.headers.get(
+                "Server"
+            )
+        )
+
+        body = response.text[:3000]
 
         return Response(
             (
                 f"HTTP: "
                 f"{response.status_code}\n\n"
-                f"{response.text[:2000]}"
+                f"Server: "
+                f"{server}\n"
+                f"Retry-After: "
+                f"{retry_after}\n\n"
+                "Response:\n"
+                f"{body}"
             ),
             status=200,
             mimetype="text/plain"
@@ -1106,9 +1133,6 @@ def test_gelbooru():
 
 # =========================================================
 # POST
-#
-# Все источники независимы.
-# Ошибка одного НЕ останавливает остальные.
 # =========================================================
 
 @app.route("/post")
@@ -1170,10 +1194,7 @@ def post_image():
             )
         )
 
-    if (
-        PEXELS_API_KEY
-        and PEXELS_WEBHOOK_URL
-    ):
+    if PEXELS_API_KEY and PEXELS_WEBHOOK_URL:
 
         jobs.append(
             (
