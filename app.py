@@ -47,17 +47,11 @@ PEXELS_API_KEY = os.environ.get(
 # API URLS
 # =========================================================
 
-WAIFU_API = (
-    "https://api.waifu.im/images"
-)
+WAIFU_API = "https://api.waifu.im/images"
 
-DANBOORU_API = (
-    "https://danbooru.donmai.us"
-)
+DANBOORU_API = "https://danbooru.donmai.us"
 
-PEXELS_API = (
-    "https://api.pexels.com/v1"
-)
+PEXELS_API = "https://api.pexels.com/v1"
 
 
 # =========================================================
@@ -65,9 +59,7 @@ PEXELS_API = (
 # =========================================================
 
 DEFAULT_HEADERS = {
-    "User-Agent": (
-        "AnimePoster/1.0"
-    )
+    "User-Agent": "AnimePoster/1.0"
 }
 
 
@@ -101,8 +93,6 @@ def danbooru_wait():
             now - LAST_DANBOORU_REQUEST
         )
 
-        # Держим запросы примерно
-        # около 1 запроса в секунду.
         wait_time = 1.2 - elapsed
 
         if wait_time > 0:
@@ -126,8 +116,7 @@ def danbooru_wait():
 def get_random_waifu():
 
     print(
-        "[Waifu.im] "
-        "Получаем изображение..."
+        "[Waifu.im] Получаем изображение..."
     )
 
     params = {
@@ -261,8 +250,7 @@ def get_random_danbooru(
         raise RuntimeError(
             f"{source_name}: "
             "Danbooru HTTP 401. "
-            "Проверь DANBOORU_USERNAME "
-            "и DANBOORU_API_KEY."
+            "Проверь логин и API key."
         )
 
     # -----------------------------------------------------
@@ -299,7 +287,7 @@ def get_random_danbooru(
         )
 
     # -----------------------------------------------------
-    # Другие HTTP ошибки
+    # Other errors
     # -----------------------------------------------------
 
     if response.status_code != 200:
@@ -360,8 +348,7 @@ def get_random_danbooru(
 
         raise RuntimeError(
             f"{source_name}: "
-            "Danbooru не вернул "
-            "подходящих изображений"
+            f"нет результатов для: {tags}"
         )
 
     selected = random.choice(
@@ -380,16 +367,12 @@ def get_random_danbooru(
 # =========================================================
 # DANBOORU ANIME
 #
-# ВАЖНО:
-# Danbooru сейчас ограничивает поиск двумя тегами.
-# Поэтому здесь ровно два тега.
+# Danbooru в твоём случае разрешает максимум 2 тега.
 # =========================================================
 
 def get_danbooru_anime():
 
-    tags = (
-        "rating:s 1girl"
-    )
+    tags = "rating:s 1girl"
 
     return get_random_danbooru(
         tags,
@@ -400,18 +383,58 @@ def get_danbooru_anime():
 # =========================================================
 # DANBOORU GAMES
 #
-# Ровно два тега из-за ограничения Danbooru.
+# Используем несколько вариантов, каждый максимум
+# с двумя тегами. Если один вариант пустой,
+# пробуем следующий.
 # =========================================================
 
 def get_danbooru_games():
 
-    tags = (
+    queries = [
+        "rating:s game_character",
+        "rating:s video_game",
+        "rating:s game_cg",
         "rating:s video_games"
+    ]
+
+    random.shuffle(
+        queries
     )
 
-    return get_random_danbooru(
-        tags,
-        "Danbooru Games"
+    last_error = None
+
+    for tags in queries:
+
+        try:
+
+            print(
+                "[Danbooru Games] "
+                f"Пробуем запрос: {tags}"
+            )
+
+            return get_random_danbooru(
+                tags,
+                "Danbooru Games"
+            )
+
+        except RuntimeError as error:
+
+            last_error = error
+
+            print(
+                "[Danbooru Games] "
+                f"Запрос не подошёл: {error}"
+            )
+
+            # Небольшая пауза перед следующим
+            # запросом, чтобы не создавать
+            # лишнюю нагрузку на API.
+            time.sleep(1.2)
+
+    raise RuntimeError(
+        "Danbooru Games: "
+        "не удалось получить изображение. "
+        f"Последняя ошибка: {last_error}"
     )
 
 
@@ -428,8 +451,7 @@ def get_random_pexels():
         )
 
     print(
-        "[Pexels] "
-        "Получаем изображение..."
+        "[Pexels] Получаем изображение..."
     )
 
     queries = [
@@ -451,9 +473,7 @@ def get_random_pexels():
 
     headers = {
         "Authorization": PEXELS_API_KEY,
-        "User-Agent": (
-            "AnimePoster/1.0"
-        )
+        "User-Agent": "AnimePoster/1.0"
     }
 
     for query in queries:
@@ -493,8 +513,7 @@ def get_random_pexels():
 
                 print(
                     "[Pexels] "
-                    f"Нет результатов: "
-                    f"{query}"
+                    f"Нет результатов: {query}"
                 )
 
                 continue
@@ -521,8 +540,7 @@ def get_random_pexels():
 
                 print(
                     "[Pexels] "
-                    f"Запрос сработал: "
-                    f"{query}"
+                    f"Запрос сработал: {query}"
                 )
 
                 return {
@@ -568,8 +586,6 @@ def download_image(
 
     image_data = response.content
 
-    # Discord webhook имеет ограничение
-    # на размер вложения.
     if len(image_data) > (
         8 * 1024 * 1024
     ):
@@ -671,8 +687,7 @@ def send_to_discord(
     else:
 
         raise RuntimeError(
-            f"Неизвестный источник: "
-            f"{source}"
+            f"Неизвестный источник: {source}"
         )
 
     if not webhook_url:
@@ -857,8 +872,8 @@ def post_image():
     results = []
 
     # -----------------------------------------------------
-    # Каждый источник независим.
-    # Ошибка одного не останавливает остальные.
+    # Источники полностью независимы:
+    # ошибка одного не останавливает остальные.
     # -----------------------------------------------------
 
     for name, getter in sources:
@@ -932,7 +947,6 @@ def status():
         "status": "online",
 
         "sources": {
-
             "waifu": bool(
                 WAIFU_WEBHOOK_URL
             ),
@@ -986,7 +1000,7 @@ def home():
 
 
 # =========================================================
-# START SERVER
+# START
 # =========================================================
 
 if __name__ == "__main__":
