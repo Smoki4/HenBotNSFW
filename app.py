@@ -454,18 +454,19 @@ def get_random_pexels():
         "[Pexels] Получаем изображение..."
     )
 
-    queries = [
-        "fashion woman",
-        "woman fashion",
-        "elegant woman",
-        "fashion portrait",
-        "evening dress",
-        "beach fashion",
-        "glamour fashion",
-        "adult fashion",
-        "fashion model",
-        "elegant fashion model"
-    ]
+ queries = [
+    "adult boudoir model",
+    "boudoir photography",
+    "lingerie fashion model",
+    "adult glamour portrait",
+    "luxury lingerie",
+    "sensual fashion portrait",
+    "glamour photoshoot",
+    "swimwear model",
+    "adult fashion model",
+    "elegant lingerie model",
+     "sexy woman"
+]
 
     random.shuffle(
         queries
