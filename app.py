@@ -15,12 +15,6 @@ WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
 PINTEREST_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PINTEREST")
 PINTEREST_ACCESS_TOKEN = os.environ.get("PINTEREST_ACCESS_TOKEN")
 
-print("========== ENV DEBUG ==========")
-print("WAIFU WEBHOOK:", "YES" if WAIFU_WEBHOOK_URL else "NO")
-print("PINTEREST WEBHOOK:", "YES" if PINTEREST_WEBHOOK_URL else "NO")
-print("PINTEREST TOKEN:", "YES" if PINTEREST_ACCESS_TOKEN else "NO")
-print("================================")
-
 WAIFU_API = "https://api.waifu.im/images"
 PINTEREST_API = "https://api.pinterest.com/v5"
 
