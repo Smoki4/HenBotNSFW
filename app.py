@@ -11,21 +11,71 @@ app = Flask(__name__)
 # НАСТРОЙКИ
 # =========================================================
 
-WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
-PINTEREST_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PINTEREST")
-PINTEREST_ACCESS_TOKEN = os.environ.get("PINTEREST_ACCESS_TOKEN")
+WAIFU_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_WAIFU"
+)
 
-WAIFU_API = "https://api.waifu.im/images"
-WAIFU_PICS_API = "https://api.waifu.pics/nsfw/waifu"
-PINTEREST_API = "https://api.pinterest.com/v5"
+PINTEREST_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_PINTEREST"
+)
+
+PINTEREST_ACCESS_TOKEN = os.environ.get(
+    "PINTEREST_ACCESS_TOKEN"
+)
+
+PEXELS_API_KEY = os.environ.get(
+    "PEXELS_API_KEY"
+)
+
+# Gelbooru
+GELBOORU_API_KEY = os.environ.get(
+    "GELBOORU_API_KEY"
+)
+
+GELBOORU_USER_ID = os.environ.get(
+    "GELBOORU_USER_ID"
+)
+
+
+# =========================================================
+# API
+# =========================================================
+
+WAIFU_API = (
+    "https://api.waifu.im/images"
+)
+
+GELBOORU_API = (
+    "https://gelbooru.com/index.php"
+)
+
+PINTEREST_API = (
+    "https://api.pinterest.com/v5"
+)
+
+PEXELS_API = (
+    "https://api.pexels.com/v1/search"
+)
+
+
+# =========================================================
+# HEADERS
+# =========================================================
 
 HEADERS = {
     "User-Agent": "AnimePoster/1.0"
 }
 
 PINTEREST_HEADERS = {
-    "Authorization": f"Bearer {PINTEREST_ACCESS_TOKEN}",
+    "Authorization": (
+        f"Bearer {PINTEREST_ACCESS_TOKEN}"
+    ),
     "Content-Type": "application/json",
+    "User-Agent": "AnimePoster/1.0"
+}
+
+PEXELS_HEADERS = {
+    "Authorization": PEXELS_API_KEY,
     "User-Agent": "AnimePoster/1.0"
 }
 
@@ -53,7 +103,10 @@ def get_random_waifu():
 
     data = response.json()
 
-    items = data.get("items", [])
+    items = data.get(
+        "items",
+        []
+    )
 
     if not items:
         raise RuntimeError(
@@ -62,11 +115,13 @@ def get_random_waifu():
 
     image = items[0]
 
-    image_url = image.get("url")
+    image_url = image.get(
+        "url"
+    )
 
     if not image_url:
         raise RuntimeError(
-            "Waifu.im не вернул URL изображения"
+            "Waifu.im не вернул URL"
         )
 
     return {
@@ -76,43 +131,175 @@ def get_random_waifu():
 
 
 # =========================================================
-# WAIFU.PICS
+# GELBOORU
+#
+# Anime NSFW 18+
+# Используем rating:questionable
+#
+# Исключаем нежелательные возрастные теги.
 # =========================================================
 
-def get_random_waifu_pics():
+def get_random_gelbooru():
+
+    tags = (
+        "rating:questionable "
+        "-loli "
+        "-shota "
+        "-lolicon "
+        "-shotacon "
+        "-child "
+        "-young "
+        "sort:random"
+    )
+
+    params = {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "json": "1",
+        "limit": "100",
+        "tags": tags
+    }
+
+    # Если Gelbooru выдал API credentials,
+    # добавляем их к запросу.
+    if GELBOORU_API_KEY:
+        params["api_key"] = (
+            GELBOORU_API_KEY
+        )
+
+    if GELBOORU_USER_ID:
+        params["user_id"] = (
+            GELBOORU_USER_ID
+        )
 
     response = requests.get(
-        WAIFU_PICS_API,
+        GELBOORU_API,
+        params=params,
         headers=HEADERS,
-        timeout=15
+        timeout=20
     )
 
     response.raise_for_status()
 
     data = response.json()
 
-    image_url = data.get("url")
+    # Gelbooru может вернуть список
+    # либо объект с ошибкой.
+    if isinstance(data, dict):
 
-    if not image_url:
-        raise RuntimeError(
-            "Waifu.pics не вернул URL изображения"
+        if data.get("success") is False:
+
+            message = data.get(
+                "message",
+                "Gelbooru API error"
+            )
+
+            raise RuntimeError(
+                message
+            )
+
+        posts = data.get(
+            "post",
+            []
         )
+
+        if isinstance(
+            posts,
+            dict
+        ):
+            posts = [posts]
+
+    elif isinstance(data, list):
+
+        posts = data
+
+    else:
+
+        posts = []
+
+    if not posts:
+
+        raise RuntimeError(
+            "Gelbooru не вернул изображений"
+        )
+
+    # Дополнительная фильтрация
+    # непосредственно перед выбором.
+    valid_posts = []
+
+    for post in posts:
+
+        file_url = post.get(
+            "file_url"
+        )
+
+        if not file_url:
+            continue
+
+        tags = post.get(
+            "tags",
+            ""
+        ).lower()
+
+        # Дополнительная защита
+        forbidden = [
+            "loli",
+            "shota",
+            "lolicon",
+            "shotacon",
+            "child",
+            "young"
+        ]
+
+        if any(
+            tag in tags
+            for tag in forbidden
+        ):
+            continue
+
+        valid_posts.append(
+            post
+        )
+
+    if not valid_posts:
+
+        raise RuntimeError(
+            "Gelbooru не нашёл "
+            "подходящих изображений"
+        )
+
+    post = random.choice(
+        valid_posts
+    )
+
+    image_url = post.get(
+        "file_url"
+    )
 
     return {
         "url": image_url,
-        "source": "Waifu.pics"
+        "source": "Gelbooru",
+        "post_id": post.get(
+            "id"
+        )
     }
 
 
 # =========================================================
-# PINTEREST API
+# PINTEREST
 # =========================================================
 
-def pinterest_request(endpoint, params=None):
+def pinterest_request(
+    endpoint,
+    params=None
+):
 
     if not PINTEREST_ACCESS_TOKEN:
+
         raise RuntimeError(
-            "PINTEREST_ACCESS_TOKEN не настроен"
+            "PINTEREST_ACCESS_TOKEN "
+            "не настроен"
         )
 
     response = requests.get(
@@ -126,10 +313,6 @@ def pinterest_request(endpoint, params=None):
 
     return response.json()
 
-
-# =========================================================
-# ПОЛУЧЕНИЕ ВСЕХ ДОСОК
-# =========================================================
 
 def get_pinterest_boards():
 
@@ -150,27 +333,29 @@ def get_pinterest_boards():
             params=params
         )
 
-        items = data.get("items", [])
+        boards.extend(
+            data.get(
+                "items",
+                []
+            )
+        )
 
-        boards.extend(items)
-
-        bookmark = data.get("bookmark")
+        bookmark = data.get(
+            "bookmark"
+        )
 
         if not bookmark:
             break
 
-        # Защита от слишком большого количества запросов
         if len(boards) >= 500:
             break
 
     return boards
 
 
-# =========================================================
-# ПОЛУЧЕНИЕ PINS ДОСКИ
-# =========================================================
-
-def get_board_pins(board_id):
+def get_board_pins(
+    board_id
+):
 
     pins = []
     bookmark = None
@@ -189,40 +374,43 @@ def get_board_pins(board_id):
             params=params
         )
 
-        items = data.get("items", [])
+        pins.extend(
+            data.get(
+                "items",
+                []
+            )
+        )
 
-        pins.extend(items)
-
-        bookmark = data.get("bookmark")
+        bookmark = data.get(
+            "bookmark"
+        )
 
         if not bookmark:
             break
 
-        # Не собираем бесконечное количество Pins
         if len(pins) >= 1000:
             break
 
     return pins
 
 
-# =========================================================
-# ПОЛУЧЕНИЕ СЛУЧАЙНОГО PIN
-# =========================================================
-
 def get_random_pinterest_pin():
 
     boards = get_pinterest_boards()
 
     if not boards:
+
         raise RuntimeError(
-            "Pinterest не вернул ни одной доски"
+            "Pinterest не вернул доски"
         )
 
     all_pins = []
 
     for board in boards:
 
-        board_id = board.get("id")
+        board_id = board.get(
+            "id"
+        )
 
         if not board_id:
             continue
@@ -234,7 +422,9 @@ def get_random_pinterest_pin():
 
         try:
 
-            pins = get_board_pins(board_id)
+            pins = get_board_pins(
+                board_id
+            )
 
             for pin in pins:
 
@@ -250,25 +440,24 @@ def get_random_pinterest_pin():
 
                 image_url = None
 
-                # Берём URL любого доступного
-                # варианта изображения
-                if images:
+                for image_data in (
+                    images.values()
+                ):
 
-                    for image_data in images.values():
+                    if not isinstance(
+                        image_data,
+                        dict
+                    ):
+                        continue
 
-                        if isinstance(
-                            image_data,
-                            dict
-                        ):
+                    url = image_data.get(
+                        "url"
+                    )
 
-                            url = image_data.get(
-                                "url"
-                            )
+                    if url:
 
-                            if url:
-
-                                image_url = url
-                                break
+                        image_url = url
+                        break
 
                 if image_url:
 
@@ -276,13 +465,15 @@ def get_random_pinterest_pin():
                         "url": image_url,
                         "source": "Pinterest",
                         "board_name": board_name,
-                        "pin_id": pin.get("id")
+                        "pin_id": pin.get(
+                            "id"
+                        )
                     })
 
         except Exception as error:
 
             print(
-                f"Ошибка доски "
+                f"Pinterest board "
                 f"{board_name}: {error}"
             )
 
@@ -291,17 +482,106 @@ def get_random_pinterest_pin():
     if not all_pins:
 
         raise RuntimeError(
-            "В Pinterest не найдено изображений"
+            "Pinterest не содержит "
+            "доступных изображений"
         )
 
-    return random.choice(all_pins)
+    return random.choice(
+        all_pins
+    )
 
 
 # =========================================================
-# СКАЧИВАНИЕ ИЗОБРАЖЕНИЯ
+# REAL ADULT NON-EXPLICIT
 # =========================================================
 
-def download_image(image_url):
+def get_random_real_adult():
+
+    if not PEXELS_API_KEY:
+
+        raise RuntimeError(
+            "PEXELS_API_KEY не настроен"
+        )
+
+    queries = [
+        "adult fashion portrait",
+        "adult fashion model",
+        "adult lifestyle portrait",
+        "adult glamour portrait",
+        "fashion model portrait",
+        "elegant adult portrait"
+    ]
+
+    query = random.choice(
+        queries
+    )
+
+    params = {
+        "query": query,
+        "per_page": 20,
+        "orientation": "portrait"
+    }
+
+    response = requests.get(
+        PEXELS_API,
+        headers=PEXELS_HEADERS,
+        params=params,
+        timeout=20
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    photos = data.get(
+        "photos",
+        []
+    )
+
+    if not photos:
+
+        raise RuntimeError(
+            "Pexels не вернул фотографии"
+        )
+
+    photo = random.choice(
+        photos
+    )
+
+    src = photo.get(
+        "src",
+        {}
+    )
+
+    image_url = (
+        src.get("original")
+        or src.get("large2x")
+        or src.get("large")
+    )
+
+    if not image_url:
+
+        raise RuntimeError(
+            "Pexels не вернул URL"
+        )
+
+    return {
+        "url": image_url,
+        "source": "Pexels",
+        "photographer": photo.get(
+            "photographer",
+            "Unknown"
+        )
+    }
+
+
+# =========================================================
+# DOWNLOAD IMAGE
+# =========================================================
+
+def download_image(
+    image_url
+):
 
     response = requests.get(
         image_url,
@@ -318,26 +598,33 @@ def download_image(image_url):
 
     image_data = response.content
 
-    # Защита от слишком большого файла
-    if len(image_data) > 8 * 1024 * 1024:
+    if len(image_data) > (
+        8 * 1024 * 1024
+    ):
 
         raise RuntimeError(
             "Изображение больше 8 MB"
         )
 
     if "png" in content_type:
+
         extension = "png"
 
     elif "webp" in content_type:
+
         extension = "webp"
 
     elif "gif" in content_type:
+
         extension = "gif"
 
     else:
+
         extension = "jpg"
 
-    filename = f"anime_art.{extension}"
+    filename = (
+        f"anime_art.{extension}"
+    )
 
     return (
         filename,
@@ -347,10 +634,12 @@ def download_image(image_url):
 
 
 # =========================================================
-# ОТПРАВКА В DISCORD
+# DISCORD
 # =========================================================
 
-def send_to_discord(image):
+def send_to_discord(
+    image
+):
 
     source = image.get(
         "source",
@@ -363,34 +652,28 @@ def send_to_discord(image):
 
     if source == "Waifu.im":
 
-        webhook_url = WAIFU_WEBHOOK_URL
-
-        if not webhook_url:
-            raise RuntimeError(
-                "DISCORD_WEBHOOK_WAIFU не настроен"
-            )
+        webhook_url = (
+            WAIFU_WEBHOOK_URL
+        )
 
         message = (
-            "🌸 Random Anime Art\n"
+            "🌸 Random Anime NSFW\n"
             "📌 Источник: Waifu.im"
         )
 
     # -----------------------------------------------------
-    # WAIFU.PICS
+    # GELBOORU
     # -----------------------------------------------------
 
-    elif source == "Waifu.pics":
+    elif source == "Gelbooru":
 
-        webhook_url = WAIFU_WEBHOOK_URL
-
-        if not webhook_url:
-            raise RuntimeError(
-                "DISCORD_WEBHOOK_WAIFU не настроен"
-            )
+        webhook_url = (
+            WAIFU_WEBHOOK_URL
+        )
 
         message = (
-            "🌸 Random Anime Art\n"
-            "📌 Источник: Waifu.pics"
+            "🔥 Random Anime 18+\n"
+            "📌 Источник: Gelbooru"
         )
 
     # -----------------------------------------------------
@@ -399,12 +682,9 @@ def send_to_discord(image):
 
     elif source == "Pinterest":
 
-        webhook_url = PINTEREST_WEBHOOK_URL
-
-        if not webhook_url:
-            raise RuntimeError(
-                "DISCORD_WEBHOOK_PINTEREST не настроен"
-            )
+        webhook_url = (
+            PINTEREST_WEBHOOK_URL
+        )
 
         board_name = image.get(
             "board_name",
@@ -416,21 +696,55 @@ def send_to_discord(image):
             f"📁 Доска: {board_name}"
         )
 
+    # -----------------------------------------------------
+    # PEXELS
+    # -----------------------------------------------------
+
+    elif source == "Pexels":
+
+        webhook_url = (
+            PINTEREST_WEBHOOK_URL
+        )
+
+        photographer = image.get(
+            "photographer",
+            "Unknown"
+        )
+
+        message = (
+            "📷 Random Adult Art\n"
+            "📌 Источник: Pexels\n"
+            f"👤 Автор: {photographer}"
+        )
+
     else:
 
         raise RuntimeError(
-            "Неизвестный источник изображения"
+            "Неизвестный источник"
         )
 
-    image_url = image.get("url")
+    if not webhook_url:
+
+        raise RuntimeError(
+            f"Webhook для {source} "
+            "не настроен"
+        )
+
+    image_url = image.get(
+        "url"
+    )
 
     if not image_url:
+
         raise RuntimeError(
-            "У изображения отсутствует URL"
+            "У изображения нет URL"
         )
 
-    filename, image_data, content_type = \
-        download_image(image_url)
+    filename, image_data, content_type = (
+        download_image(
+            image_url
+        )
+    )
 
     files = {
         "file": (
@@ -453,32 +767,36 @@ def send_to_discord(image):
 
 
 # =========================================================
-# ПОЛУЧЕНИЕ ИЗОБРАЖЕНИЯ ИЗ ИСТОЧНИКА
+# GET IMAGE
 # =========================================================
 
-def get_image_from_source(source):
+def get_image_from_source(
+    source
+):
 
     if source == "waifu":
 
         return get_random_waifu()
 
-    elif source == "waifu_pics":
+    if source == "gelbooru":
 
-        return get_random_waifu_pics()
+        return get_random_gelbooru()
 
-    elif source == "pinterest":
+    if source == "pinterest":
 
         return get_random_pinterest_pin()
 
-    else:
+    if source == "real_adult":
 
-        raise RuntimeError(
-            f"Неизвестный источник: {source}"
-        )
+        return get_random_real_adult()
+
+    raise RuntimeError(
+        f"Неизвестный source: {source}"
+    )
 
 
 # =========================================================
-# ГЛАВНАЯ
+# HOME
 # =========================================================
 
 @app.route("/")
@@ -508,14 +826,10 @@ def ping():
 # =========================================================
 # POST
 #
-# Доступные источники:
-#
-# Waifu.im      → NSFW
-# Waifu.pics    → NSFW
-# Pinterest     → Pinterest
-#
-# При ошибке одного источника
-# автоматически пробуется следующий.
+# 25% Waifu.im
+# 25% Gelbooru
+# 25% Pinterest
+# 25% Pexels
 # =========================================================
 
 @app.route("/post")
@@ -523,31 +837,53 @@ def post_image():
 
     try:
 
-        # -------------------------------------------------
-        # СОБИРАЕМ ДОСТУПНЫЕ ИСТОЧНИКИ
-        # -------------------------------------------------
-
         sources = []
 
+        # -----------------------------
         # Waifu.im
-        if WAIFU_WEBHOOK_URL:
-            sources.append("waifu")
+        # -----------------------------
 
-        # Waifu.pics использует тот же
-        # Discord webhook, что и Waifu.im
         if WAIFU_WEBHOOK_URL:
-            sources.append("waifu_pics")
 
+            sources.append(
+                "waifu"
+            )
+
+        # -----------------------------
+        # Gelbooru
+        # -----------------------------
+
+        if WAIFU_WEBHOOK_URL:
+
+            sources.append(
+                "gelbooru"
+            )
+
+        # -----------------------------
         # Pinterest
+        # -----------------------------
+
         if (
             PINTEREST_WEBHOOK_URL
             and PINTEREST_ACCESS_TOKEN
         ):
-            sources.append("pinterest")
 
-        # -------------------------------------------------
-        # ПРОВЕРКА
-        # -------------------------------------------------
+            sources.append(
+                "pinterest"
+            )
+
+        # -----------------------------
+        # Real adult
+        # -----------------------------
+
+        if (
+            PINTEREST_WEBHOOK_URL
+            and PEXELS_API_KEY
+        ):
+
+            sources.append(
+                "real_adult"
+            )
 
         if not sources:
 
@@ -557,47 +893,67 @@ def post_image():
                 mimetype="text/plain"
             )
 
-        # -------------------------------------------------
-        # ПЕРЕМЕШИВАЕМ ИСТОЧНИКИ
-        #
-        # Первый будет случайным.
-        # Остальные используются как fallback.
-        # -------------------------------------------------
+        # =================================================
+        # РАВНЫЙ ШАНС
+        # =================================================
 
-        random.shuffle(sources)
-
-        print(
-            f"POST: порядок источников: {sources}"
+        selected_source = random.choice(
+            sources
         )
 
-        # -------------------------------------------------
-        # ПРОБУЕМ ИСТОЧНИКИ ПО ОЧЕРЕДИ
-        # -------------------------------------------------
+        print(
+            "POST: выбран:",
+            selected_source
+        )
+
+        # =================================================
+        # FALLBACK
+        # =================================================
+
+        fallback_sources = [
+            source
+            for source in sources
+            if source != selected_source
+        ]
+
+        random.shuffle(
+            fallback_sources
+        )
+
+        attempt_order = [
+            selected_source
+        ] + fallback_sources
 
         last_error = None
 
-        for source in sources:
+        for source in attempt_order:
 
             try:
 
                 print(
-                    f"POST: пробуем источник: {source}"
-                )
-
-                image = get_image_from_source(
+                    "POST: пробуем:",
                     source
                 )
 
-                print(
-                    f"POST: найдено изображение "
-                    f"из {image.get('source')}"
+                image = (
+                    get_image_from_source(
+                        source
+                    )
                 )
 
-                # Отправляем в Discord
-                send_to_discord(image)
+                print(
+                    "POST: найдено:",
+                    image.get(
+                        "source"
+                    )
+                )
+
+                send_to_discord(
+                    image
+                )
 
                 print(
-                    "POST: отправлено в Discord"
+                    "POST: успешно отправлено"
                 )
 
                 return Response(
@@ -611,40 +967,24 @@ def post_image():
                 last_error = error
 
                 print(
-                    f"POST: источник {source} "
-                    f"не сработал: {error}"
-                )
-
-                print(
-                    "POST: пробуем следующий источник..."
+                    f"POST: ошибка "
+                    f"{source}: {error}"
                 )
 
                 continue
 
-        # -------------------------------------------------
-        # ЕСЛИ НИ ОДИН ИСТОЧНИК НЕ СРАБОТАЛ
-        # -------------------------------------------------
-
         print(
-            f"POST: все источники завершились ошибкой: "
-            f"{last_error}"
+            "POST: все источники "
+            f"не сработали: {last_error}"
         )
 
         return Response(
-            "All image sources failed",
+            "All sources failed",
             status=502,
             mimetype="text/plain"
         )
 
-    # -----------------------------------------------------
-    # TIMEOUT
-    # -----------------------------------------------------
-
     except requests.exceptions.Timeout:
-
-        print(
-            "POST: timeout"
-        )
 
         return Response(
             "Request timeout",
@@ -652,14 +992,11 @@ def post_image():
             mimetype="text/plain"
         )
 
-    # -----------------------------------------------------
-    # HTTP ERROR
-    # -----------------------------------------------------
-
     except requests.exceptions.HTTPError as error:
 
         print(
-            f"POST: HTTP error: {error}"
+            "POST HTTP error:",
+            error
         )
 
         return Response(
@@ -668,14 +1005,11 @@ def post_image():
             mimetype="text/plain"
         )
 
-    # -----------------------------------------------------
-    # ОБЩАЯ ОШИБКА
-    # -----------------------------------------------------
-
     except Exception as error:
 
         print(
-            f"POST: error: {error}"
+            "POST error:",
+            error
         )
 
         return Response(
@@ -686,7 +1020,7 @@ def post_image():
 
 
 # =========================================================
-# ЗАПУСК
+# START
 # =========================================================
 
 if __name__ == "__main__":
