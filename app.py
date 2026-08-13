@@ -1,7 +1,7 @@
 import os
 import random
-import time
 import threading
+import time
 
 import requests
 from flask import Flask, Response
@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 
 # =========================================================
-# ENV
+# ENVIRONMENT VARIABLES
 # =========================================================
 
 WAIFU_WEBHOOK_URL = os.environ.get(
@@ -44,10 +44,12 @@ PEXELS_API_KEY = os.environ.get(
 
 
 # =========================================================
-# API
+# API URLS
 # =========================================================
 
-WAIFU_API = "https://api.waifu.im/images"
+WAIFU_API = (
+    "https://api.waifu.im/images"
+)
 
 DANBOORU_API = (
     "https://danbooru.donmai.us"
@@ -62,8 +64,10 @@ PEXELS_API = (
 # HEADERS
 # =========================================================
 
-HEADERS = {
-    "User-Agent": "AnimePoster/1.0"
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "AnimePoster/1.0"
+    )
 }
 
 
@@ -97,12 +101,14 @@ def danbooru_wait():
             now - LAST_DANBOORU_REQUEST
         )
 
+        # Держим запросы примерно
+        # около 1 запроса в секунду.
         wait_time = 1.2 - elapsed
 
         if wait_time > 0:
 
             print(
-                f"[Danbooru] "
+                "[Danbooru] "
                 f"Ожидание {wait_time:.1f} сек."
             )
 
@@ -120,7 +126,8 @@ def danbooru_wait():
 def get_random_waifu():
 
     print(
-        "[Waifu.im] Получаем изображение..."
+        "[Waifu.im] "
+        "Получаем изображение..."
     )
 
     params = {
@@ -132,8 +139,8 @@ def get_random_waifu():
     response = requests.get(
         WAIFU_API,
         params=params,
-        headers=HEADERS,
-        timeout=25
+        headers=DEFAULT_HEADERS,
+        timeout=30
     )
 
     response.raise_for_status()
@@ -254,7 +261,8 @@ def get_random_danbooru(
         raise RuntimeError(
             f"{source_name}: "
             "Danbooru HTTP 401. "
-            "Проверь логин и API key."
+            "Проверь DANBOORU_USERNAME "
+            "и DANBOORU_API_KEY."
         )
 
     # -----------------------------------------------------
@@ -291,7 +299,7 @@ def get_random_danbooru(
         )
 
     # -----------------------------------------------------
-    # Другие ошибки
+    # Другие HTTP ошибки
     # -----------------------------------------------------
 
     if response.status_code != 200:
@@ -362,9 +370,8 @@ def get_random_danbooru(
 
     print(
         f"[{source_name}] "
-        f"Изображение получено. "
-        f"Post ID: "
-        f"{selected.get('post_id')}"
+        "Изображение получено. "
+        f"Post ID: {selected.get('post_id')}"
     )
 
     return selected
@@ -372,23 +379,16 @@ def get_random_danbooru(
 
 # =========================================================
 # DANBOORU ANIME
-# Mature / glamour, без explicit
+#
+# ВАЖНО:
+# Danbooru сейчас ограничивает поиск двумя тегами.
+# Поэтому здесь ровно два тега.
 # =========================================================
 
 def get_danbooru_anime():
 
     tags = (
-        "1girl "
-        "solo "
-        "mature "
-        "rating:s "
-        "-loli "
-        "-lolicon "
-        "-shota "
-        "-shotacon "
-        "-child "
-        "-minor "
-        "-young"
+        "rating:s 1girl"
     )
 
     return get_random_danbooru(
@@ -399,24 +399,14 @@ def get_danbooru_anime():
 
 # =========================================================
 # DANBOORU GAMES
-# Mature / glamour, без explicit
+#
+# Ровно два тега из-за ограничения Danbooru.
 # =========================================================
 
 def get_danbooru_games():
 
     tags = (
-        "1girl "
-        "video_games "
-        "game_character "
-        "mature "
-        "rating:s "
-        "-loli "
-        "-lolicon "
-        "-shota "
-        "-shotacon "
-        "-child "
-        "-minor "
-        "-young"
+        "rating:s video_games"
     )
 
     return get_random_danbooru(
@@ -427,7 +417,6 @@ def get_danbooru_games():
 
 # =========================================================
 # PEXELS
-# Взрослый glamour/fashion, без explicit
 # =========================================================
 
 def get_random_pexels():
@@ -439,77 +428,126 @@ def get_random_pexels():
         )
 
     print(
-        "[Pexels] Получаем изображение..."
+        "[Pexels] "
+        "Получаем изображение..."
     )
 
     queries = [
-        "adult woman glamour fashion",
-        "adult woman elegant fashion",
-        "adult woman beach fashion",
-        "adult woman evening dress",
-        "adult woman portrait fashion",
-        "adult woman boudoir style",
-        "adult woman luxury fashion",
-        "adult woman editorial fashion"
+        "fashion woman",
+        "woman fashion",
+        "elegant woman",
+        "fashion portrait",
+        "evening dress",
+        "beach fashion",
+        "glamour fashion",
+        "adult fashion",
+        "fashion model",
+        "elegant fashion model"
     ]
 
-    query = random.choice(
+    random.shuffle(
         queries
     )
 
     headers = {
         "Authorization": PEXELS_API_KEY,
-        "User-Agent": "AnimePoster/1.0"
-    }
-
-    params = {
-        "query": query,
-        "per_page": 80,
-        "page": random.randint(1, 10)
-    }
-
-    response = requests.get(
-        f"{PEXELS_API}/search",
-        headers=headers,
-        params=params,
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    photos = data.get(
-        "photos",
-        []
-    )
-
-    if not photos:
-
-        raise RuntimeError(
-            "Pexels не вернул изображения"
+        "User-Agent": (
+            "AnimePoster/1.0"
         )
-
-    photo = random.choice(
-        photos
-    )
-
-    image_url = (
-        photo
-        .get("src", {})
-        .get("original")
-    )
-
-    if not image_url:
-
-        raise RuntimeError(
-            "Pexels не вернул URL"
-        )
-
-    return {
-        "url": image_url,
-        "source": "Pexels"
     }
+
+    for query in queries:
+
+        try:
+
+            params = {
+                "query": query,
+                "per_page": 80,
+                "page": 1
+            }
+
+            response = requests.get(
+                f"{PEXELS_API}/search",
+                headers=headers,
+                params=params,
+                timeout=30
+            )
+
+            if response.status_code == 429:
+
+                raise RuntimeError(
+                    "Pexels HTTP 429 "
+                    "Too Many Requests"
+                )
+
+            response.raise_for_status()
+
+            data = response.json()
+
+            photos = data.get(
+                "photos",
+                []
+            )
+
+            if not photos:
+
+                print(
+                    "[Pexels] "
+                    f"Нет результатов: "
+                    f"{query}"
+                )
+
+                continue
+
+            random.shuffle(
+                photos
+            )
+
+            for photo in photos:
+
+                src = photo.get(
+                    "src",
+                    {}
+                )
+
+                image_url = (
+                    src.get("original")
+                    or src.get("large2x")
+                    or src.get("large")
+                )
+
+                if not image_url:
+                    continue
+
+                print(
+                    "[Pexels] "
+                    f"Запрос сработал: "
+                    f"{query}"
+                )
+
+                return {
+                    "url": image_url,
+                    "source": "Pexels"
+                }
+
+        except RuntimeError:
+
+            raise
+
+        except Exception as error:
+
+            print(
+                "[Pexels] "
+                f"Ошибка запроса "
+                f"'{query}': {error}"
+            )
+
+            continue
+
+    raise RuntimeError(
+        "Pexels не вернул изображения "
+        "ни по одному запросу"
+    )
 
 
 # =========================================================
@@ -522,14 +560,16 @@ def download_image(
 
     response = requests.get(
         image_url,
-        headers=HEADERS,
-        timeout=40
+        headers=DEFAULT_HEADERS,
+        timeout=45
     )
 
     response.raise_for_status()
 
     image_data = response.content
 
+    # Discord webhook имеет ограничение
+    # на размер вложения.
     if len(image_data) > (
         8 * 1024 * 1024
     ):
@@ -546,15 +586,19 @@ def download_image(
     )
 
     if "png" in content_type:
+
         extension = "png"
 
     elif "webp" in content_type:
+
         extension = "webp"
 
     elif "gif" in content_type:
+
         extension = "gif"
 
     else:
+
         extension = "jpg"
 
     filename = (
@@ -598,7 +642,7 @@ def send_to_discord(
         )
 
         message = (
-            "🎨 Mature Anime Art\n"
+            "🎨 Anime Art\n"
             "📌 Источник: Danbooru"
         )
 
@@ -609,7 +653,7 @@ def send_to_discord(
         )
 
         message = (
-            "🎮 Mature Game Character Art\n"
+            "🎮 Game Character Art\n"
             "📌 Источник: Danbooru"
         )
 
@@ -620,7 +664,7 @@ def send_to_discord(
         )
 
         message = (
-            "📷 Adult Glamour / Fashion\n"
+            "📷 Fashion / Glamour\n"
             "📌 Источник: Pexels"
         )
 
@@ -707,8 +751,8 @@ def publish_source(
     except Exception as error:
 
         print(
-            f"[{name}] ОШИБКА: "
-            f"{error}"
+            f"[{name}] "
+            f"ОШИБКА: {error}"
         )
 
         return {
@@ -740,7 +784,7 @@ def post_image():
     sources = []
 
     # -----------------------------------------------------
-    # Waifu
+    # WAIFU
     # -----------------------------------------------------
 
     if WAIFU_WEBHOOK_URL:
@@ -753,7 +797,7 @@ def post_image():
         )
 
     # -----------------------------------------------------
-    # Danbooru Anime
+    # DANBOORU ANIME
     # -----------------------------------------------------
 
     if (
@@ -770,7 +814,7 @@ def post_image():
         )
 
     # -----------------------------------------------------
-    # Danbooru Games
+    # DANBOORU GAMES
     # -----------------------------------------------------
 
     if (
@@ -787,7 +831,7 @@ def post_image():
         )
 
     # -----------------------------------------------------
-    # Pexels
+    # PEXELS
     # -----------------------------------------------------
 
     if (
@@ -812,7 +856,11 @@ def post_image():
 
     results = []
 
-    # Каждый источник работает независимо.
+    # -----------------------------------------------------
+    # Каждый источник независим.
+    # Ошибка одного не останавливает остальные.
+    # -----------------------------------------------------
+
     for name, getter in sources:
 
         result = publish_source(
@@ -884,6 +932,7 @@ def status():
         "status": "online",
 
         "sources": {
+
             "waifu": bool(
                 WAIFU_WEBHOOK_URL
             ),
@@ -937,7 +986,7 @@ def home():
 
 
 # =========================================================
-# START
+# START SERVER
 # =========================================================
 
 if __name__ == "__main__":
