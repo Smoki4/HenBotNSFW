@@ -1,5 +1,4 @@
 import os
-import json
 import random
 import requests
 
@@ -12,12 +11,12 @@ app = Flask(__name__)
 # НАСТРОЙКИ
 # =========================================================
 
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
+PINTEREST_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PINTEREST")
 PINTEREST_ACCESS_TOKEN = os.environ.get("PINTEREST_ACCESS_TOKEN")
 
-PINTEREST_API = "https://api.pinterest.com/v5"
-
 WAIFU_API = "https://api.waifu.im/images"
+PINTEREST_API = "https://api.pinterest.com/v5"
 
 HEADERS = {
     "User-Agent": "AnimePoster/1.0"
@@ -66,7 +65,7 @@ def get_random_waifu():
 
     if not image_url:
         raise RuntimeError(
-            "У изображения Waifu.im отсутствует URL"
+            "Waifu.im не вернул URL изображения"
         )
 
     return {
@@ -76,7 +75,7 @@ def get_random_waifu():
 
 
 # =========================================================
-# PINTEREST
+# PINTEREST API
 # =========================================================
 
 def pinterest_request(endpoint, params=None):
@@ -99,13 +98,12 @@ def pinterest_request(endpoint, params=None):
 
 
 # =========================================================
-# Получить все доски пользователя
+# ПОЛУЧЕНИЕ ВСЕХ ДОСОК
 # =========================================================
 
 def get_pinterest_boards():
 
     boards = []
-
     bookmark = None
 
     while True:
@@ -131,21 +129,20 @@ def get_pinterest_boards():
         if not bookmark:
             break
 
-        # Защита от бесконечной пагинации
-        if len(boards) >= 2000:
+        # Защита от слишком большого количества запросов
+        if len(boards) >= 500:
             break
 
     return boards
 
 
 # =========================================================
-# Получить Pins конкретной доски
+# ПОЛУЧЕНИЕ PINS ДОСКИ
 # =========================================================
 
 def get_board_pins(board_id):
 
     pins = []
-
     bookmark = None
 
     while True:
@@ -171,8 +168,7 @@ def get_board_pins(board_id):
         if not bookmark:
             break
 
-        # Чтобы один запрос /post не мог бесконечно
-        # собирать огромное количество данных.
+        # Не собираем бесконечное количество Pins
         if len(pins) >= 1000:
             break
 
@@ -180,7 +176,7 @@ def get_board_pins(board_id):
 
 
 # =========================================================
-# Получить случайный Pin из всех досок
+# ПОЛУЧЕНИЕ СЛУЧАЙНОГО PIN
 # =========================================================
 
 def get_random_pinterest_pin():
@@ -201,29 +197,46 @@ def get_random_pinterest_pin():
         if not board_id:
             continue
 
+        board_name = board.get(
+            "name",
+            "Pinterest"
+        )
+
         try:
 
             pins = get_board_pins(board_id)
 
             for pin in pins:
 
+                media = pin.get(
+                    "media",
+                    {}
+                )
+
+                images = media.get(
+                    "images",
+                    {}
+                )
+
                 image_url = None
 
-                media = pin.get("media", {})
-
-                images = media.get("images", {})
-
-                # Pinterest обычно возвращает несколько
-                # вариантов размера изображения.
+                # Берём URL любого доступного
+                # варианта изображения
                 if images:
 
                     for image_data in images.values():
 
-                        if isinstance(image_data, dict):
+                        if isinstance(
+                            image_data,
+                            dict
+                        ):
 
-                            url = image_data.get("url")
+                            url = image_data.get(
+                                "url"
+                            )
 
                             if url:
+
                                 image_url = url
                                 break
 
@@ -232,34 +245,30 @@ def get_random_pinterest_pin():
                     all_pins.append({
                         "url": image_url,
                         "source": "Pinterest",
-                        "pin_id": pin.get("id"),
-                        "board_id": board_id,
-                        "board_name": board.get(
-                            "name",
-                            "Pinterest"
-                        )
+                        "board_name": board_name,
+                        "pin_id": pin.get("id")
                     })
 
-        except requests.exceptions.RequestException as error:
+        except Exception as error:
 
             print(
-                f"Ошибка получения доски "
-                f"{board_id}: {error}"
+                f"Ошибка доски "
+                f"{board_name}: {error}"
             )
 
             continue
 
     if not all_pins:
+
         raise RuntimeError(
-            "В твоих Pinterest-досках не найдено "
-            "изображений"
+            "В Pinterest не найдено изображений"
         )
 
     return random.choice(all_pins)
 
 
 # =========================================================
-# Скачать изображение
+# СКАЧИВАНИЕ ИЗОБРАЖЕНИЯ
 # =========================================================
 
 def download_image(image_url):
@@ -279,7 +288,7 @@ def download_image(image_url):
 
     image_data = response.content
 
-    # Discord webhook обычно принимает небольшие файлы.
+    # Защита от слишком большого файла
     if len(image_data) > 8 * 1024 * 1024:
 
         raise RuntimeError(
@@ -308,50 +317,63 @@ def download_image(image_url):
 
 
 # =========================================================
-# Отправка в Discord
+# ОТПРАВКА В DISCORD
 # =========================================================
 
 def send_to_discord(image):
-
-    if not DISCORD_WEBHOOK_URL:
-
-        raise RuntimeError(
-            "DISCORD_WEBHOOK_URL не настроен"
-        )
-
-    image_url = image.get("url")
-
-    if not image_url:
-
-        raise RuntimeError(
-            "У изображения отсутствует URL"
-        )
-
-    filename, image_data, content_type = \
-        download_image(image_url)
 
     source = image.get(
         "source",
         "Unknown"
     )
 
-    payload = {
-        "username": "Anime Poster",
-        "content": f"🌸 Random Anime Art\n📌 Источник: {source}"
-    }
+    # Выбираем webhook в зависимости
+    # от источника изображения
+    if source == "Waifu.im":
 
-    # Если Pinterest — указываем доску
-    if source == "Pinterest":
+        webhook_url = WAIFU_WEBHOOK_URL
+
+        if not webhook_url:
+            raise RuntimeError(
+                "DISCORD_WEBHOOK_WAIFU не настроен"
+            )
+
+        message = "🌸 Random Anime Art\n📌 Источник: Waifu.im"
+
+    elif source == "Pinterest":
+
+        webhook_url = PINTEREST_WEBHOOK_URL
+
+        if not webhook_url:
+            raise RuntimeError(
+                "DISCORD_WEBHOOK_PINTEREST не настроен"
+            )
 
         board_name = image.get(
             "board_name",
             "Pinterest"
         )
 
-        payload["content"] = (
-            f"🌸 Random Anime Art\n"
-            f"📌 Pinterest: {board_name}"
+        message = (
+            "📌 Random Pinterest Art\n"
+            f"📁 Доска: {board_name}"
         )
+
+    else:
+
+        raise RuntimeError(
+            "Неизвестный источник изображения"
+        )
+
+    image_url = image.get("url")
+
+    if not image_url:
+        raise RuntimeError(
+            "У изображения отсутствует URL"
+        )
+
+    filename, image_data, content_type = \
+        download_image(image_url)
 
     files = {
         "file": (
@@ -362,12 +384,9 @@ def send_to_discord(image):
     }
 
     response = requests.post(
-        DISCORD_WEBHOOK_URL,
+        webhook_url,
         data={
-            "payload_json": json.dumps(
-                payload,
-                ensure_ascii=False
-            )
+            "content": message
         },
         files=files,
         timeout=30
@@ -377,7 +396,7 @@ def send_to_discord(image):
 
 
 # =========================================================
-# / — проверка работы Render
+# ГЛАВНАЯ
 # =========================================================
 
 @app.route("/")
@@ -391,8 +410,7 @@ def home():
 
 
 # =========================================================
-# /ping — НЕ отправляет картинку
-# Только держит Render активным
+# PING
 # =========================================================
 
 @app.route("/ping")
@@ -406,13 +424,10 @@ def ping():
 
 
 # =========================================================
-# /post
+# POST
 #
-# Случайно выбирает:
-#
-# 50% → Waifu.im
-# 50% → Pinterest
-#
+# 50% Waifu.im
+# 50% Pinterest
 # =========================================================
 
 @app.route("/post")
@@ -420,60 +435,120 @@ def post_image():
 
     try:
 
-        # Проверяем webhook
-        if not DISCORD_WEBHOOK_URL:
+        # Проверяем наличие хотя бы одного webhook
+        if (
+            not WAIFU_WEBHOOK_URL
+            and not PINTEREST_WEBHOOK_URL
+        ):
 
             return Response(
-                "DISCORD_WEBHOOK_URL not configured",
+                "No Discord webhooks configured",
                 status=500,
                 mimetype="text/plain"
             )
 
-        # Проверяем Pinterest только если он нужен
-        use_pinterest = random.choice(
-            [True, False]
-        )
+        # Проверяем доступные источники
+        sources = []
 
-        if use_pinterest:
+        if WAIFU_WEBHOOK_URL:
+            sources.append("waifu")
 
-            print(
-                "POST: выбран Pinterest"
+        if (
+            PINTEREST_WEBHOOK_URL
+            and PINTEREST_ACCESS_TOKEN
+        ):
+            sources.append("pinterest")
+
+        if not sources:
+
+            return Response(
+                "No sources configured",
+                status=500,
+                mimetype="text/plain"
             )
 
-            if not PINTEREST_ACCESS_TOKEN:
+        # Случайный источник
+        source = random.choice(sources)
 
-                print(
-                    "Pinterest token отсутствует. "
-                    "Используем Waifu.im."
-                )
+        print(
+            f"POST: выбран источник: {source}"
+        )
+
+        # =================================================
+        # WAIFU
+        # =================================================
+
+        if source == "waifu":
+
+            try:
 
                 image = get_random_waifu()
 
-            else:
+            except Exception as error:
 
-                image = get_random_pinterest_pin()
+                print(
+                    f"Waifu.im ошибка: {error}"
+                )
+
+                # Если Pinterest доступен,
+                # пробуем его
+                if "pinterest" in sources:
+
+                    print(
+                        "Пробуем Pinterest..."
+                    )
+
+                    image = (
+                        get_random_pinterest_pin()
+                    )
+
+                else:
+
+                    raise
+
+        # =================================================
+        # PINTEREST
+        # =================================================
 
         else:
 
-            print(
-                "POST: выбран Waifu.im"
-            )
+            try:
 
-            image = get_random_waifu()
+                image = get_random_pinterest_pin()
+
+            except Exception as error:
+
+                print(
+                    f"Pinterest ошибка: {error}"
+                )
+
+                # Если Waifu доступен,
+                # пробуем его
+                if "waifu" in sources:
+
+                    print(
+                        "Пробуем Waifu.im..."
+                    )
+
+                    image = get_random_waifu()
+
+                else:
+
+                    raise
 
         print(
-            f"POST: источник: "
-            f"{image.get('source')}"
+            f"POST: найдено изображение "
+            f"из {image.get('source')}"
         )
 
+        # Отправляем в соответствующий канал
         send_to_discord(image)
 
         print(
-            "POST: изображение отправлено "
-            "в Discord"
+            "POST: отправлено в Discord"
         )
 
-        # Очень маленький ответ для cron-job.org
+        # Маленький ответ для cron-job.org
         return Response(
             "OK",
             status=200,
@@ -518,7 +593,7 @@ def post_image():
 
 
 # =========================================================
-# Запуск
+# ЗАПУСК
 # =========================================================
 
 if __name__ == "__main__":
