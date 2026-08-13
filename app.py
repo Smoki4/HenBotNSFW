@@ -1,10 +1,312 @@
+import os
+import random
+import threading
+import time
+import json
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
+from flask import Flask, Response
+
+
+app = Flask(__name__)
+
+
 # =========================================================
-# REACTOR GAMES
+# ENV
 # =========================================================
+
+WAIFU_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_WAIFU"
+)
+
+DANBOORU_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_DANBOORU"
+)
+
+REACTOR_GAMES_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_REACTOR_GAMES"
+)
+
+PEXELS_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_PEXELS"
+)
+
+DANBOORU_USERNAME = os.environ.get(
+    "DANBOORU_USERNAME"
+)
+
+DANBOORU_API_KEY = os.environ.get(
+    "DANBOORU_API_KEY"
+)
+
+PEXELS_API_KEY = os.environ.get(
+    "PEXELS_API_KEY"
+)
+
+
+# =========================================================
+# URL
+# =========================================================
+
+DANBOORU_API = "https://danbooru.donmai.us"
+
+PEXELS_API = "https://api.pexels.com/v1"
 
 REACTOR_GAMES_URL = (
     "https://reactor.cc/tag/Игровая+эротика"
 )
+
+
+# =========================================================
+# HEADERS
+# =========================================================
+
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "AnimePoster/1.0 "
+        "(compatible; DiscordPoster)"
+    )
+}
+
+DANBOORU_HEADERS = {
+    "User-Agent": (
+        "AnimePoster/1.0 "
+        f"(user {DANBOORU_USERNAME or 'unknown'})"
+    ),
+    "Accept": "application/json",
+}
+
+REACTOR_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 "
+        "(compatible; ReactorPoster/1.0)"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,"
+        "application/xml;q=0.9,*/*;q=0.8"
+    ),
+}
+
+
+# =========================================================
+# DANBOORU RATE LIMITER
+# =========================================================
+
+DANBOORU_LOCK = threading.Lock()
+LAST_DANBOORU_REQUEST = 0.0
+
+
+def danbooru_wait():
+
+    global LAST_DANBOORU_REQUEST
+
+    with DANBOORU_LOCK:
+
+        now = time.monotonic()
+
+        elapsed = (
+            now - LAST_DANBOORU_REQUEST
+        )
+
+        wait_time = 1.2 - elapsed
+
+        if wait_time > 0:
+
+            print(
+                "[Danbooru] "
+                f"Ожидание {wait_time:.1f} сек."
+            )
+
+            time.sleep(wait_time)
+
+        LAST_DANBOORU_REQUEST = (
+            time.monotonic()
+        )
+
+
+# =========================================================
+# WAIFU.IM
+# =========================================================
+
+def get_random_waifu():
+
+    print(
+        "[Waifu.im] Получаем изображение..."
+    )
+
+    params = {
+        "IsNsfw": "True",
+        "OrderBy": "Random",
+        "PageSize": 1,
+    }
+
+    response = requests.get(
+        "https://api.waifu.im/images",
+        params=params,
+        headers=DEFAULT_HEADERS,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    items = data.get(
+        "items",
+        [],
+    )
+
+    if not items:
+
+        raise RuntimeError(
+            "Waifu.im не вернул изображение"
+        )
+
+    image_url = items[0].get("url")
+
+    if not image_url:
+
+        raise RuntimeError(
+            "Waifu.im не вернул URL"
+        )
+
+    return {
+        "url": image_url,
+        "source": "Waifu.im",
+    }
+
+
+# =========================================================
+# DANBOORU
+# =========================================================
+
+def get_random_danbooru(
+    tags,
+    source_name,
+):
+
+    if not DANBOORU_USERNAME:
+
+        raise RuntimeError(
+            "DANBOORU_USERNAME не настроен"
+        )
+
+    if not DANBOORU_API_KEY:
+
+        raise RuntimeError(
+            "DANBOORU_API_KEY не настроен"
+        )
+
+    print(
+        f"[{source_name}] "
+        f"Запрос: {tags}"
+    )
+
+    danbooru_wait()
+
+    response = requests.get(
+        f"{DANBOORU_API}/posts.json",
+        params={
+            "limit": 20,
+            "tags": tags,
+        },
+        auth=(
+            DANBOORU_USERNAME,
+            DANBOORU_API_KEY,
+        ),
+        headers=DANBOORU_HEADERS,
+        timeout=30,
+    )
+
+    print(
+        f"[{source_name}] "
+        f"Danbooru HTTP: "
+        f"{response.status_code}"
+    )
+
+    if response.status_code == 429:
+
+        raise RuntimeError(
+            f"{source_name}: Danbooru HTTP 429"
+        )
+
+    if response.status_code == 401:
+
+        raise RuntimeError(
+            f"{source_name}: Danbooru HTTP 401"
+        )
+
+    if response.status_code == 403:
+
+        raise RuntimeError(
+            f"{source_name}: Danbooru HTTP 403"
+        )
+
+    if response.status_code == 422:
+
+        body = response.text[:1000]
+
+        print(
+            f"[{source_name}] "
+            f"Danbooru 422: {body}"
+        )
+
+        raise RuntimeError(
+            f"{source_name}: Danbooru HTTP 422"
+        )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    if not isinstance(data, list):
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "неожиданный ответ Danbooru"
+        )
+
+    images = []
+
+    for post in data:
+
+        image_url = (
+            post.get("large_file_url")
+            or post.get("file_url")
+        )
+
+        if not image_url:
+            continue
+
+        images.append({
+            "url": image_url,
+            "source": source_name,
+            "post_id": post.get("id"),
+        })
+
+    if not images:
+
+        raise RuntimeError(
+            f"{source_name}: "
+            "изображения не найдены"
+        )
+
+    return random.choice(images)
+
+
+def get_danbooru_anime():
+
+    return get_random_danbooru(
+        "rating:s 1girl",
+        "Danbooru Anime",
+    )
+
+
+# =========================================================
+# REACTOR HISTORY
+# =========================================================
 
 REACTOR_SEEN_FILE = "reactor_seen.json"
 
@@ -12,10 +314,13 @@ REACTOR_LOCK = threading.Lock()
 
 
 def load_reactor_seen():
-    """Загружает список уже опубликованных URL."""
 
     try:
-        if not os.path.exists(REACTOR_SEEN_FILE):
+
+        if not os.path.exists(
+            REACTOR_SEEN_FILE
+        ):
+
             return set()
 
         with open(
@@ -26,37 +331,35 @@ def load_reactor_seen():
 
             data = file.read().strip()
 
-            if not data:
-                return set()
+        if not data:
 
-            import json
+            return set()
 
-            values = json.loads(data)
+        values = json.loads(data)
 
-            if not isinstance(values, list):
-                return set()
+        if not isinstance(
+            values,
+            list,
+        ):
 
-            return set(values)
+            return set()
+
+        return set(values)
 
     except Exception as error:
 
         print(
             "[Reactor Games] "
-            f"Не удалось загрузить историю: {error}"
+            f"Ошибка загрузки истории: {error}"
         )
 
         return set()
 
 
 def save_reactor_seen(seen):
-    """Сохраняет историю опубликованных URL."""
-
-    import json
 
     try:
 
-        # Чтобы файл не разрастался бесконечно.
-        # Храним последние 2000 URL.
         values = list(seen)[-2000:]
 
         with open(
@@ -76,12 +379,15 @@ def save_reactor_seen(seen):
 
         print(
             "[Reactor Games] "
-            f"Не удалось сохранить историю: {error}"
+            f"Ошибка сохранения истории: {error}"
         )
 
 
+# =========================================================
+# REACTOR PARSER
+# =========================================================
+
 def extract_reactor_images(html):
-    """Извлекает изображения из HTML Reactor."""
 
     soup = BeautifulSoup(
         html,
@@ -99,6 +405,7 @@ def extract_reactor_images(html):
         )
 
         if not src:
+
             continue
 
         src = urljoin(
@@ -108,7 +415,6 @@ def extract_reactor_images(html):
 
         lowered = src.lower()
 
-        # Отбрасываем служебные изображения.
         if any(
             value in lowered
             for value in (
@@ -120,34 +426,30 @@ def extract_reactor_images(html):
                 "smile",
             )
         ):
+
             continue
-
-        # Убираем thumbnail, если Reactor дал
-        # оригинальный URL в другом атрибуте.
-        if "data-src" in img.attrs:
-            original = img.get("data-src")
-
-            if original:
-                src = urljoin(
-                    REACTOR_GAMES_URL,
-                    original,
-                )
 
         candidates.append(src)
 
-    # Убираем дубликаты, сохраняя порядок.
     return list(
-        dict.fromkeys(candidates)
+        dict.fromkeys(
+            candidates
+        )
     )
 
 
 def get_reactor_page(page):
-    """Получает конкретную страницу Reactor."""
 
-    url = (
-        f"{REACTOR_GAMES_URL}"
-        f"/{page}"
-    )
+    if page == 1:
+
+        url = REACTOR_GAMES_URL
+
+    else:
+
+        url = (
+            f"{REACTOR_GAMES_URL}"
+            f"/{page}"
+        )
 
     print(
         "[Reactor Games] "
@@ -167,6 +469,10 @@ def get_reactor_page(page):
     )
 
 
+# =========================================================
+# REACTOR GAMES
+# =========================================================
+
 def get_reactor_games():
 
     print(
@@ -174,14 +480,10 @@ def get_reactor_games():
         "Получаем случайный арт..."
     )
 
-    # Важно: доступ к истории делаем под lock,
-    # чтобы два одновременных запроса не выбрали
-    # одну и ту же картинку.
     with REACTOR_LOCK:
 
         seen = load_reactor_seen()
 
-        # Пробуем несколько случайных страниц.
         pages = list(
             range(1, 31)
         )
@@ -199,6 +501,7 @@ def get_reactor_games():
                 )
 
                 if not candidates:
+
                     continue
 
                 unused = [
@@ -210,7 +513,7 @@ def get_reactor_games():
                 print(
                     "[Reactor Games] "
                     f"Страница {page}: "
-                    f"{len(candidates)} изображений, "
+                    f"{len(candidates)} найдено, "
                     f"{len(unused)} новых"
                 )
 
@@ -218,9 +521,8 @@ def get_reactor_games():
                     unused
                 )
 
-                # Если нашли достаточно новых
-                # кандидатов, дальше можно не ходить.
                 if len(all_unused) >= 20:
+
                     break
 
             except Exception as error:
@@ -231,21 +533,20 @@ def get_reactor_games():
                     f"{error}"
                 )
 
-        # Убираем дубли между страницами.
         all_unused = list(
             dict.fromkeys(
                 all_unused
             )
         )
 
+        # Если всё уже было отправлено,
+        # очищаем историю и начинаем новый цикл.
         if not all_unused:
 
-            # Если история слишком большая,
-            # можно начать новый цикл.
             print(
                 "[Reactor Games] "
-                "Новых изображений не найдено. "
-                "Очищаем историю."
+                "Новых изображений нет. "
+                "Начинаем новый цикл."
             )
 
             seen.clear()
@@ -254,8 +555,9 @@ def get_reactor_games():
                 seen
             )
 
-            # Ещё одна попытка.
-            random.shuffle(pages)
+            random.shuffle(
+                pages
+            )
 
             for page in pages[:10]:
 
@@ -265,15 +567,19 @@ def get_reactor_games():
                         page
                     )
 
-                    if candidates:
-                        all_unused.extend(
-                            candidates
-                        )
+                    all_unused.extend(
+                        candidates
+                    )
 
-                except Exception:
-                    continue
+                except Exception as error:
+
+                    print(
+                        "[Reactor Games] "
+                        f"Ошибка: {error}"
+                    )
 
                 if len(all_unused) >= 20:
+
                     break
 
             all_unused = list(
@@ -285,82 +591,44 @@ def get_reactor_games():
         if not all_unused:
 
             raise RuntimeError(
-                "Reactor не вернул новых изображений"
+                "Reactor не вернул изображения"
             )
 
-        # Выбираем случайное изображение
-        # среди ещё не опубликованных.
         random.shuffle(
             all_unused
         )
 
-        image_url = all_unused[0]
+        image_url = None
 
-        # Проверяем, что картинка действительно доступна.
-        try:
+        # Проверяем несколько кандидатов.
+        for candidate in all_unused[:15]:
 
-            check = requests.head(
-                image_url,
-                headers=REACTOR_HEADERS,
-                timeout=15,
-                allow_redirects=True,
-            )
+            try:
 
-            if check.status_code != 200:
-
-                # Если HEAD запрещён сервером,
-                # попробуем GET.
                 check = requests.get(
-                    image_url,
+                    candidate,
                     headers=REACTOR_HEADERS,
                     timeout=15,
                     stream=True,
                 )
 
-            if check.status_code != 200:
+                if check.status_code == 200:
 
-                raise RuntimeError(
-                    f"HTTP {check.status_code}"
-                )
+                    image_url = candidate
 
-        except Exception as error:
+                    break
 
-            print(
-                "[Reactor Games] "
-                f"Ошибка проверки изображения: "
-                f"{error}"
+            except requests.RequestException:
+
+                continue
+
+        if not image_url:
+
+            raise RuntimeError(
+                "Не удалось получить "
+                "доступное изображение Reactor"
             )
 
-            # Пробуем несколько других кандидатов.
-            for alternative in all_unused[1:10]:
-
-                try:
-
-                    check = requests.get(
-                        alternative,
-                        headers=REACTOR_HEADERS,
-                        timeout=15,
-                        stream=True,
-                    )
-
-                    if check.status_code == 200:
-
-                        image_url = alternative
-                        break
-
-                except Exception:
-                    continue
-
-            else:
-
-                raise RuntimeError(
-                    "Не удалось получить "
-                    "доступное изображение Reactor"
-                )
-
-        # Записываем URL в историю ДО возврата.
-        # Благодаря этому параллельный запуск
-        # не выберет тот же URL.
         seen.add(
             image_url
         )
@@ -374,12 +642,485 @@ def get_reactor_games():
             "Выбрано новое изображение"
         )
 
-        print(
-            "[Reactor Games] "
-            f"URL: {image_url}"
-        )
-
         return {
             "url": image_url,
             "source": "Reactor Games",
         }
+
+
+# =========================================================
+# PEXELS
+# =========================================================
+
+def get_random_pexels():
+
+    if not PEXELS_API_KEY:
+
+        raise RuntimeError(
+            "PEXELS_API_KEY не настроен"
+        )
+
+    print(
+        "[Pexels] Получаем изображение..."
+    )
+
+    queries = [
+        "boudoir photography",
+        "lingerie fashion model",
+        "adult glamour portrait",
+        "luxury lingerie",
+        "sensual fashion portrait",
+        "glamour photoshoot",
+        "swimwear model",
+        "adult fashion model",
+        "elegant fashion model",
+    ]
+
+    random.shuffle(
+        queries
+    )
+
+    headers = {
+        "Authorization": PEXELS_API_KEY,
+        "User-Agent": "AnimePoster/1.0",
+    }
+
+    for query in queries:
+
+        response = requests.get(
+            f"{PEXELS_API}/search",
+            headers=headers,
+            params={
+                "query": query,
+                "per_page": 80,
+                "page": random.randint(1, 5),
+            },
+            timeout=30,
+        )
+
+        if response.status_code == 429:
+
+            raise RuntimeError(
+                "Pexels HTTP 429"
+            )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        photos = data.get(
+            "photos",
+            [],
+        )
+
+        if not photos:
+
+            continue
+
+        random.shuffle(
+            photos
+        )
+
+        for photo in photos:
+
+            src = photo.get(
+                "src",
+                {},
+            )
+
+            image_url = (
+                src.get("large2x")
+                or src.get("large")
+                or src.get("original")
+            )
+
+            if image_url:
+
+                return {
+                    "url": image_url,
+                    "source": "Pexels",
+                }
+
+    raise RuntimeError(
+        "Pexels не вернул изображения"
+    )
+
+
+# =========================================================
+# DOWNLOAD
+# =========================================================
+
+def download_image(image_url):
+
+    response = requests.get(
+        image_url,
+        headers=DEFAULT_HEADERS,
+        timeout=45,
+    )
+
+    response.raise_for_status()
+
+    content = response.content
+
+    if len(content) > 8 * 1024 * 1024:
+
+        raise RuntimeError(
+            "Изображение больше 8 MB"
+        )
+
+    content_type = response.headers.get(
+        "Content-Type",
+        "image/jpeg",
+    )
+
+    if "png" in content_type:
+
+        extension = "png"
+
+    elif "webp" in content_type:
+
+        extension = "webp"
+
+    elif "gif" in content_type:
+
+        extension = "gif"
+
+    else:
+
+        extension = "jpg"
+
+    return (
+        f"image.{extension}",
+        content,
+        content_type,
+    )
+
+
+# =========================================================
+# DISCORD
+# =========================================================
+
+def send_to_discord(image):
+
+    source = image["source"]
+
+    image_url = image["url"]
+
+    webhook_map = {
+
+        "Waifu.im": (
+            WAIFU_WEBHOOK_URL,
+            "🌸 Anime",
+        ),
+
+        "Danbooru Anime": (
+            DANBOORU_WEBHOOK_URL,
+            "🎨 Anime Art",
+        ),
+
+        "Reactor Games": (
+            REACTOR_GAMES_WEBHOOK_URL,
+            "🎮 Game Art",
+        ),
+
+        "Pexels": (
+            PEXELS_WEBHOOK_URL,
+            "📷 Fashion / Glamour",
+        ),
+    }
+
+    if source not in webhook_map:
+
+        raise RuntimeError(
+            f"Неизвестный источник: {source}"
+        )
+
+    webhook_url, message = (
+        webhook_map[source]
+    )
+
+    if not webhook_url:
+
+        raise RuntimeError(
+            f"Webhook для {source} "
+            "не настроен"
+        )
+
+    (
+        filename,
+        image_data,
+        content_type,
+    ) = download_image(
+        image_url
+    )
+
+    response = requests.post(
+        webhook_url,
+        data={
+            "content": (
+                f"{message}\n"
+                f"Источник: {source}"
+            )
+        },
+        files={
+            "file": (
+                filename,
+                image_data,
+                content_type,
+            )
+        },
+        timeout=45,
+    )
+
+    response.raise_for_status()
+
+
+# =========================================================
+# PUBLISH
+# =========================================================
+
+def publish_source(
+    name,
+    getter,
+):
+
+    try:
+
+        image = getter()
+
+        send_to_discord(
+            image
+        )
+
+        print(
+            f"[{name}] "
+            "Успешно опубликовано"
+        )
+
+        return {
+            "source": name,
+            "success": True,
+            "error": None,
+        }
+
+    except Exception as error:
+
+        print(
+            f"[{name}] "
+            f"ОШИБКА: {error}"
+        )
+
+        return {
+            "source": name,
+            "success": False,
+            "error": str(error),
+        }
+
+
+# =========================================================
+# POST
+# =========================================================
+
+@app.route("/post")
+def post_image():
+
+    print(
+        "======================================================="
+    )
+
+    print(
+        "POST: запуск независимой публикации"
+    )
+
+    print(
+        "======================================================="
+    )
+
+    sources = []
+
+    if WAIFU_WEBHOOK_URL:
+
+        sources.append(
+            (
+                "Waifu.im",
+                get_random_waifu,
+            )
+        )
+
+    if (
+        DANBOORU_WEBHOOK_URL
+        and DANBOORU_USERNAME
+        and DANBOORU_API_KEY
+    ):
+
+        sources.append(
+            (
+                "Danbooru Anime",
+                get_danbooru_anime,
+            )
+        )
+
+    if REACTOR_GAMES_WEBHOOK_URL:
+
+        sources.append(
+            (
+                "Reactor Games",
+                get_reactor_games,
+            )
+        )
+
+    if (
+        PEXELS_WEBHOOK_URL
+        and PEXELS_API_KEY
+    ):
+
+        sources.append(
+            (
+                "Pexels",
+                get_random_pexels,
+            )
+        )
+
+    if not sources:
+
+        return Response(
+            "No sources configured",
+            status=500,
+        )
+
+    results = []
+
+    for name, getter in sources:
+
+        results.append(
+            publish_source(
+                name,
+                getter,
+            )
+        )
+
+    successful = sum(
+        1
+        for result in results
+        if result["success"]
+    )
+
+    errors = (
+        len(results)
+        - successful
+    )
+
+    print(
+        "======================================================="
+    )
+
+    print(
+        "POST: публикация завершена"
+    )
+
+    print(
+        f"POST: успешно: {successful}"
+    )
+
+    print(
+        f"POST: ошибок: {errors}"
+    )
+
+    for result in results:
+
+        if not result["success"]:
+
+            print(
+                f"POST: "
+                f"{result['source']}: "
+                f"{result['error']}"
+            )
+
+    print(
+        "======================================================="
+    )
+
+    return Response(
+        f"OK - successful: "
+        f"{successful}, errors: {errors}",
+        status=200,
+    )
+
+
+# =========================================================
+# STATUS
+# =========================================================
+
+@app.route("/status")
+def status():
+
+    return {
+        "status": "online",
+
+        "sources": {
+
+            "waifu": bool(
+                WAIFU_WEBHOOK_URL
+            ),
+
+            "danbooru_anime": bool(
+                DANBOORU_WEBHOOK_URL
+                and DANBOORU_USERNAME
+                and DANBOORU_API_KEY
+            ),
+
+            "reactor_games": bool(
+                REACTOR_GAMES_WEBHOOK_URL
+            ),
+
+            "pexels": bool(
+                PEXELS_WEBHOOK_URL
+                and PEXELS_API_KEY
+            ),
+        },
+    }
+
+
+# =========================================================
+# PING
+# =========================================================
+
+@app.route("/ping")
+def ping():
+
+    return Response(
+        "OK",
+        status=200,
+    )
+
+
+# =========================================================
+# HOME
+# =========================================================
+
+@app.route("/")
+def home():
+
+    return Response(
+        "Anime Poster is running.",
+        status=200,
+    )
+
+
+# =========================================================
+# START
+# =========================================================
+
+if __name__ == "__main__":
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            "8080",
+        )
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+    )
