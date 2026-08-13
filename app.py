@@ -458,14 +458,14 @@ def get_random_pexels():
     "adult boudoir model",
     "boudoir photography",
     "lingerie fashion model",
-    "adult glamour portrait",
+    "adult woman beauty",
     "luxury lingerie",
-    "sensual fashion portrait",
-    "glamour photoshoot",
+    "cosplay",
+    "big boob",
     "swimwear model",
     "adult fashion model",
     "elegant lingerie model",
-     "sexy woman"
+    "sexy woman"
 ]
 
     random.shuffle(
