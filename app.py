@@ -70,7 +70,7 @@ RULE34_API = (
 # Рейтинг намеренно зафиксирован на SAFE.
 # =========================================================
 
-RULE34_RATING = "rating:safe"
+RULE34_RATING = "rating:explicit"
 
 
 RULE34_GAME_TAGS = [
@@ -453,7 +453,7 @@ def get_random_danbooru(
 def get_danbooru_anime():
 
     return get_random_danbooru(
-        "rating:s 1girl",
+        "rating:explicit 1girl",
         "Danbooru Anime",
     )
 
