@@ -77,7 +77,7 @@ RULE34_API = (
 # Explicit и Questionable здесь НЕ используются.
 # =========================================================
 
-RULE34_RATING = "rating:questionable"
+RULE34_RATING = "rating:explicit"
 
 
 RULE34_GAME_TAGS = [
