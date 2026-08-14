@@ -111,7 +111,7 @@ GAME_TAGS = [
     "VTuber",
     "Витуберы",
     "Gaming Art",
-    "Игровой арт",
+    "Игровая эротика",
     "Minecraft",
     "Майнкрафт",
     "Doom",
@@ -135,6 +135,7 @@ GAME_TAGS = [
     "Helltaker",
     "Хеллтейкер",
     "Awaria",
+     "Blue Archive",
 ]
 
 
@@ -160,10 +161,11 @@ MATURE_GAME_TAGS = [
     "stockings",
     "bodysuit",
     "latex",
-    "cosplay",
+    "cosplay 18+",
     "fanservice",
     "mature_fanart",
     "suggestive_fanart",
+   
 ]
 
 
