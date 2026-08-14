@@ -1,4 +1,4 @@
-```python
+
 import os
 import random
 import threading
@@ -473,7 +473,7 @@ def get_rule34_games():
             # Безопасный игровой арт.
             "tags": (
                 f"{game_tag} "
-                "rating:s "
+                "rating:explicit "
                 "sort:random"
             ),
 
