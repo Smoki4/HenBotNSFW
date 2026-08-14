@@ -1,4 +1,3 @@
-
 import os
 import random
 import threading
@@ -43,6 +42,16 @@ PEXELS_API_KEY = os.environ.get(
     "PEXELS_API_KEY"
 )
 
+# Rule34 API credentials.
+# НЕ вставляй ключи прямо в app.py.
+RULE34_API_KEY = os.environ.get(
+    "RULE34_API_KEY"
+)
+
+RULE34_USER_ID = os.environ.get(
+    "RULE34_USER_ID"
+)
+
 
 # =========================================================
 # API
@@ -57,19 +66,16 @@ PEXELS_API = (
 )
 
 RULE34_API = (
-    "https://api.rule34.xxx/"
-    "index.php"
+    "https://api.rule34.xxx/index.php"
 )
 
 
 # =========================================================
 # RULE34
 # =========================================================
-#
-# ВАЖНО:
-# Рейтинг намеренно зафиксирован на SAFE.
-# =========================================================
 
+# Безопасный рейтинг.
+# Не менять на explicit.
 RULE34_RATING = "rating:explicit"
 
 
@@ -297,7 +303,6 @@ def get_random_waifu():
             if not image_url:
                 continue
 
-            # Проверяем размер до полной загрузки.
             try:
 
                 head = requests.head(
@@ -478,10 +483,6 @@ def parse_rule34_response(
     if not text:
         return []
 
-    # -----------------------------------------------------
-    # JSON
-    # -----------------------------------------------------
-
     try:
 
         data = response.json()
@@ -490,7 +491,6 @@ def parse_rule34_response(
             data,
             list,
         ):
-
             return data
 
         if isinstance(
@@ -518,10 +518,6 @@ def parse_rule34_response(
     except ValueError:
         pass
 
-    # -----------------------------------------------------
-    # XML fallback
-    # -----------------------------------------------------
-
     if (
         "xml" in content_type
         or text.startswith(
@@ -546,12 +542,10 @@ def parse_rule34_response(
                     "post"
                 ):
 
-                    post = dict(
-                        element.attrib
-                    )
-
                     posts.append(
-                        post
+                        dict(
+                            element.attrib
+                        )
                     )
 
             if posts:
@@ -564,10 +558,6 @@ def parse_rule34_response(
                 f"XML parse error: "
                 f"{error}"
             )
-
-    # -----------------------------------------------------
-    # Debug
-    # -----------------------------------------------------
 
     print(
         "[Rule34 Games] "
@@ -593,14 +583,26 @@ def parse_rule34_response(
 
 def get_rule34_games():
 
+    if not RULE34_API_KEY:
+
+        raise RuntimeError(
+            "RULE34_API_KEY "
+            "не настроен"
+        )
+
+    if not RULE34_USER_ID:
+
+        raise RuntimeError(
+            "RULE34_USER_ID "
+            "не настроен"
+        )
+
     print(
         "[Rule34 Games] "
-        "Ищем игровой арт..."
+        "Ищем safe игровой арт..."
     )
 
-    games = (
-        RULE34_GAME_TAGS.copy()
-    )
+    games = RULE34_GAME_TAGS.copy()
 
     random.shuffle(
         games
@@ -624,6 +626,10 @@ def get_rule34_games():
                 f"{RULE34_RATING}"
             ),
             "limit": "100",
+
+            # API authentication
+            "api_key": RULE34_API_KEY,
+            "user_id": RULE34_USER_ID,
         }
 
         try:
@@ -701,7 +707,6 @@ def get_rule34_games():
             if not image_url:
                 continue
 
-            # Проверяем расширение.
             lowered = (
                 image_url.lower()
             )
@@ -747,7 +752,7 @@ def get_rule34_games():
     raise RuntimeError(
         "Rule34 Games: "
         "не удалось найти "
-        "подходящий игровой пост"
+        "подходящий safe игровой пост"
     )
 
 
@@ -1146,7 +1151,13 @@ def post_image():
             )
         )
 
-    if RULE34_GAMES_WEBHOOK_URL:
+    # Rule34 включается ТОЛЬКО если
+    # webhook + API key + user ID заданы.
+    if (
+        RULE34_GAMES_WEBHOOK_URL
+        and RULE34_API_KEY
+        and RULE34_USER_ID
+    ):
 
         sources.append(
             (
@@ -1259,6 +1270,8 @@ def status():
 
             "rule34_games": bool(
                 RULE34_GAMES_WEBHOOK_URL
+                and RULE34_API_KEY
+                and RULE34_USER_ID
             ),
 
             "pexels": bool(
@@ -1269,6 +1282,11 @@ def status():
 
         "rule34_rating": (
             RULE34_RATING
+        ),
+
+        "rule34_auth": bool(
+            RULE34_API_KEY
+            and RULE34_USER_ID
         ),
     }
 
