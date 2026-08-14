@@ -1,11 +1,10 @@
+```python
 import os
 import random
 import threading
 import time
-from urllib.parse import quote, urljoin
 
 import requests
-from bs4 import BeautifulSoup
 from flask import Flask, Response
 
 
@@ -16,157 +15,132 @@ app = Flask(__name__)
 # ENV
 # =========================================================
 
-WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
-DANBOORU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_DANBOORU")
-REACTOR_GAMES_WEBHOOK_URL = os.environ.get(
-    "DISCORD_WEBHOOK_REACTOR_GAMES"
+WAIFU_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_WAIFU"
 )
-PEXELS_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PEXELS")
 
-DANBOORU_USERNAME = os.environ.get("DANBOORU_USERNAME")
-DANBOORU_API_KEY = os.environ.get("DANBOORU_API_KEY")
-PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+DANBOORU_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_DANBOORU"
+)
+
+# НОВЫЙ webhook именно для Rule34 Games
+RULE34_GAMES_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_RULE34_GAMES"
+)
+
+PEXELS_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_PEXELS"
+)
+
+DANBOORU_USERNAME = os.environ.get(
+    "DANBOORU_USERNAME"
+)
+
+DANBOORU_API_KEY = os.environ.get(
+    "DANBOORU_API_KEY"
+)
+
+PEXELS_API_KEY = os.environ.get(
+    "PEXELS_API_KEY"
+)
 
 
 # =========================================================
 # URL
 # =========================================================
 
-DANBOORU_API = "https://danbooru.donmai.us"
-PEXELS_API = "https://api.pexels.com/v1"
-REACTOR_BASE_URL = "https://reactor.cc"
+DANBOORU_API = (
+    "https://danbooru.donmai.us"
+)
+
+PEXELS_API = (
+    "https://api.pexels.com/v1"
+)
+
+RULE34_API = (
+    "https://api.rule34.xxx/"
+    "index.php"
+)
 
 
 # =========================================================
-# GAME TAGS
+# НАСТРОЙКИ ИГР
+# =========================================================
+#
+# ВОТ ЗДЕСЬ добавляй или меняй игры.
+#
+# Используются реальные теги Rule34.
+#
+# Пример:
+#
+# "genshin_impact"
+# "nier_automata"
+# "street_fighter"
+#
+# Если по конкретному тегу результатов нет,
+# бот автоматически попробует другую игру.
 # =========================================================
 
-GAME_TAGS = [
-    # Warhammer
-    "Warhammer 40,000 Игровая эротика",
-    "Warhammer 40000 Игровая эротика",
-    "Вархаммер 40000 Игровая эротика",
-    "Warhammer Игровая эротика",
-    "Вархаммер Игровая эротика",
-    "Warhammer Vermintide Игровая эротика",
-    "Vermintide Игровая эротика",
-
-    # Genshin / Hoyoverse
-    "Genshin Impact Игровая эротика",
-    "Геншин Импакт Игровая эротика",
-    "Zenless Zone Zero Игровая эротика",
-    "ZZZ Игровая эротика",
-    "Wuthering Waves",
-    "Arknights Игровая эротика",
-    "Arknights Endfield Игровая эротика",
-
-    # Fighting games
-    "Street Fighter Игровая эротика",
-    "Стрит Файтер Игровая эротика",
-    "Mortal Kombat Игровая эротика",
-    "Мортал Комбат Игровая эротика",
-    "Skullgirls Игровая эротика",
-    "Скуллгерлс Игровая эротика",
-
-    # Anime / JRPG
-    "NieR Automata Игровая эротика",
-    "Nier Automata Игровая эротика",
-    "Ниер Автомата Игровая эротика",
-    "Nier (series) Игровая эротика"
-    "Metal Gear Solid Игровая эротика",
-    "Метал Гир Солид Игровая эротика",
-    "Metal Gear Rising Игровая эротика",
-    "Метал Гир Райзинг Игровая эротика",
-    "Everlasting Summer Игровая эротика",
-    "Бесконечное лето Игровая эротика",
-    "Doki Doki Literature Club Игровая эротика",
-    "Доки Доки Литературный Клуб Игровая эротика",
-
-    # Multiplayer
-    "Dota 2 Игровая эротика",
-    "Дота 2 Игровая эротика",
-    "Apex Legends Игровая эротика",
-    "Апекс Легендс Игровая эротика",
-    "Team Fortress 2 Игровая эротика",
-    "Тим Фортресс Игровая эротика",
-    "Deadlock Игровая эротика",
-    "Overwatch Игровая эротика",
-    "Овервотч Игровая эротика",
-    "Fortnite Игровая эротика",
-    "Фортнайт Игровая эротика",
-    "PUBG Игровая эротика",
-    "Helldivers Игровая эротика",
-
-    # Horror
-    "Resident Evil Игровая эротика",
-    "Резидент Ивил Игровая эротика",
-    "Silent Hill Игровая эротика",
-    "Fallout Игровая эротика",
-    "Фоллаут Игровая эротика",
-    "FNAF Игровая эротика",
-    "Five Nights at Freddy's Игровая эротика",
-
-    # Other
-    "Furry",
-    "Фурри",
-    "VTuber ",
-    "Витуберы Игровая эротика",
-    "Gaming Art Игровая эротика",
-    "Игровая эротика Игровая эротика",
-    "Minecraft Игровая эротика",
-    "Майнкрафт Игровая эротика",
-    "Doom Игровая эротика",
-    "Дум Игровая эротика",
-    "Project Zomboid Игровая эротика",
-    "Portal Игровая эротика",
-    "Портал Игровая эротика",
-    "Mass Effect Игровая эротика",
-    "Масс Эффект Игровая эротика",
-    "World of Warcraft Игровая эротика",
-    "Deadlock Игровая эротика",
-    "Batman Игровая эротика",
-    "Бэтмен Игровая эротика",
-    "Darksiders Игровая эротика",
-    "Devil May Cry Игровая эротика",
-    "Девил Мей Край Игровая эротика",
-    "Halo Игровая эротика",
-    "Хало Игровая эротика",
-    "Far Cry Игровая эротика",
-    "Фар Край Игровая эротика",
-    "Helltaker Игровая эротика",
-    "Хеллтейкер Игровая эротика",
-    "Awaria Игровая эротика",
-     "Blue Archive Игровая эротика",
-]
-
-
-# =========================================================
-# MATURE / SUGGESTIVE TAGS
-# =========================================================
-
-MATURE_GAME_TAGS = [
-    "mature",
-    "adult",
-    "suggestive",
-    "ecchi",
-    "lewd",
-    "lingerie",
-    "swimsuit",
-    "bikini",
-    "pinup",
-    "glamour",
-    "sensual",
-    "risque",
-    "revealing",
-    "thigh_highs",
-    "stockings",
-    "bodysuit",
-    "latex",
-    "cosplay 18+",
-    "fanservice",
-    "mature_fanart",
-    "suggestive_fanart",
-   
+RULE34_GAME_TAGS = [
+    "genshin_impact",
+    "nier_automata",
+    "street_fighter",
+    "skullgirls",
+    "overwatch",
+    "resident_evil",
+    "warhammer_40k",
+    "doom",
+    "fallout",
+    "fortnite",
+    "apex_legends",
+    "team_fortress_2",
+    "mortal_kombat",
+    "metal_gear",
+    "metal_gear_rising",
+    "dota_2",
+    "minecraft",
+    "portal",
+    "mass_effect",
+    "world_of_warcraft",
+    "deadlock",
+    "helldivers",
+    "wuthering_waves",
+    "arknights",
+    "arknights_endfield",
+    "batman",
+    "darksiders",
+    "devil_may_cry",
+    "fnaf",
+    "halo",
+    "far_cry",
+    "pubg",
+    "helltaker",
+    "project_zomboid",
+    "vampire_survivors",
+    "cyberpunk_2077",
+    "baldurs_gate_3",
+    "the_witcher",
+    "mass_effect",
+    "dragon_age",
+    "borderlands",
+    "resident_evil",
+    "silent_hill",
+    "dead_by_daylight",
+    "dark_souls",
+    "elden_ring",
+    "final_fantasy",
+    "kingdom_hearts",
+    "persona",
+    "shin_megami_tensei",
+    "fire_emblem",
+    "pokemon",
+    "zelda",
+    "mario",
+    "sonic_the_hedgehog",
+    "street_fighter",
+    "tekken",
+    "soul_calibur",
+    "guilty_gear",
 ]
 
 
@@ -177,60 +151,72 @@ MATURE_GAME_TAGS = [
 DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 "
-        "(compatible; GameArtPoster/1.0)"
+        "(compatible; GamePoster/1.0)"
     )
 }
 
 DANBOORU_HEADERS = {
     "User-Agent": (
-        "GameArtPoster/1.0 "
+        "GamePoster/1.0 "
         f"(user {DANBOORU_USERNAME or 'unknown'})"
     ),
     "Accept": "application/json",
 }
 
-REACTOR_HEADERS = {
+RULE34_HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 "
-        "(compatible; GameArtPoster/1.0)"
+        "GamePoster/1.0"
     ),
     "Accept": (
-        "text/html,application/xhtml+xml,"
-        "application/xml;q=0.9,*/*;q=0.8"
+        "application/json,"
+        "text/plain,*/*"
     ),
-    "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
 }
 
 
 # =========================================================
-# REACTOR MEMORY
+# MEMORY
 # =========================================================
 
-REACTOR_USED = set()
-REACTOR_LOCK = threading.Lock()
+RULE34_USED_IDS = set()
 
-MAX_REACTOR_MEMORY = 1000
+RULE34_LOCK = threading.Lock()
 
-
-def reactor_was_used(key):
-
-    with REACTOR_LOCK:
-        return key in REACTOR_USED
+MAX_RULE34_MEMORY = 500
 
 
-def reactor_mark_used(key):
+def rule34_was_used(post_id):
 
-    with REACTOR_LOCK:
+    if post_id is None:
+        return False
 
-        REACTOR_USED.add(key)
+    with RULE34_LOCK:
+        return post_id in RULE34_USED_IDS
 
-        if len(REACTOR_USED) > MAX_REACTOR_MEMORY:
 
-            old_key = random.choice(
-                list(REACTOR_USED)
+def rule34_mark_used(post_id):
+
+    if post_id is None:
+        return
+
+    with RULE34_LOCK:
+
+        RULE34_USED_IDS.add(
+            post_id
+        )
+
+        if (
+            len(RULE34_USED_IDS)
+            > MAX_RULE34_MEMORY
+        ):
+
+            old_id = random.choice(
+                list(RULE34_USED_IDS)
             )
 
-            REACTOR_USED.discard(old_key)
+            RULE34_USED_IDS.discard(
+                old_id
+            )
 
 
 # =========================================================
@@ -238,6 +224,7 @@ def reactor_mark_used(key):
 # =========================================================
 
 DANBOORU_LOCK = threading.Lock()
+
 LAST_DANBOORU_REQUEST = 0.0
 
 
@@ -253,18 +240,25 @@ def danbooru_wait():
             now - LAST_DANBOORU_REQUEST
         )
 
-        wait_time = 1.2 - elapsed
+        wait_time = (
+            1.2 - elapsed
+        )
 
         if wait_time > 0:
 
             print(
                 "[Danbooru] "
-                f"Ожидание {wait_time:.1f} сек."
+                f"Ожидание "
+                f"{wait_time:.1f} сек."
             )
 
-            time.sleep(wait_time)
+            time.sleep(
+                wait_time
+            )
 
-        LAST_DANBOORU_REQUEST = time.monotonic()
+        LAST_DANBOORU_REQUEST = (
+            time.monotonic()
+        )
 
 
 # =========================================================
@@ -274,18 +268,17 @@ def danbooru_wait():
 def get_random_waifu():
 
     print(
-        "[Waifu.im] Получаем изображение..."
+        "[Waifu.im] "
+        "Получаем изображение..."
     )
-
-    params = {
-        "IsNsfw": "True",
-        "OrderBy": "Random",
-        "PageSize": 1,
-    }
 
     response = requests.get(
         "https://api.waifu.im/images",
-        params=params,
+        params={
+            "IsNsfw": "True",
+            "OrderBy": "Random",
+            "PageSize": 1,
+        },
         headers=DEFAULT_HEADERS,
         timeout=30,
     )
@@ -294,20 +287,27 @@ def get_random_waifu():
 
     data = response.json()
 
-    items = data.get("items", [])
+    items = data.get(
+        "items",
+        [],
+    )
 
     if not items:
 
         raise RuntimeError(
-            "Waifu.im не вернул изображение"
+            "Waifu.im "
+            "не вернул изображение"
         )
 
-    image_url = items[0].get("url")
+    image_url = items[0].get(
+        "url"
+    )
 
     if not image_url:
 
         raise RuntimeError(
-            "Waifu.im не вернул URL"
+            "Waifu.im "
+            "не вернул URL"
         )
 
     return {
@@ -328,13 +328,15 @@ def get_random_danbooru(
     if not DANBOORU_USERNAME:
 
         raise RuntimeError(
-            "DANBOORU_USERNAME не настроен"
+            "DANBOORU_USERNAME "
+            "не настроен"
         )
 
     if not DANBOORU_API_KEY:
 
         raise RuntimeError(
-            "DANBOORU_API_KEY не настроен"
+            "DANBOORU_API_KEY "
+            "не настроен"
         )
 
     print(
@@ -360,31 +362,14 @@ def get_random_danbooru(
 
     print(
         f"[{source_name}] "
-        f"Danbooru HTTP: "
+        f"HTTP: "
         f"{response.status_code}"
     )
 
-    if response.status_code == 429:
-
-        raise RuntimeError(
-            f"{source_name}: Danbooru HTTP 429"
-        )
-
-    if response.status_code in (401, 403):
-
-        raise RuntimeError(
-            f"{source_name}: "
-            f"Danbooru HTTP "
-            f"{response.status_code}"
-        )
-
     if response.status_code == 422:
 
-        body = response.text[:1500]
-
         print(
-            f"[{source_name}] "
-            f"Danbooru 422: {body}"
+            response.text[:1000]
         )
 
         raise RuntimeError(
@@ -396,11 +381,14 @@ def get_random_danbooru(
 
     data = response.json()
 
-    if not isinstance(data, list):
+    if not isinstance(
+        data,
+        list,
+    ):
 
         raise RuntimeError(
             f"{source_name}: "
-            "неожиданный ответ Danbooru"
+            "неожиданный ответ"
         )
 
     images = []
@@ -408,20 +396,24 @@ def get_random_danbooru(
     for post in data:
 
         image_url = (
-            post.get("large_file_url")
-            or post.get("file_url")
+            post.get(
+                "large_file_url"
+            )
+            or post.get(
+                "file_url"
+            )
         )
 
         if not image_url:
             continue
 
-        images.append(
-            {
-                "url": image_url,
-                "source": source_name,
-                "post_id": post.get("id"),
-            }
-        )
+        images.append({
+            "url": image_url,
+            "source": source_name,
+            "post_id": post.get(
+                "id"
+            ),
+        })
 
     if not images:
 
@@ -430,7 +422,9 @@ def get_random_danbooru(
             "изображения не найдены"
         )
 
-    return random.choice(images)
+    return random.choice(
+        images
+    )
 
 
 def get_danbooru_anime():
@@ -442,372 +436,151 @@ def get_danbooru_anime():
 
 
 # =========================================================
-# REACTOR HELPERS
+# RULE34 GAMES
 # =========================================================
 
-def normalize_reactor_url(url):
-
-    if not url:
-        return None
-
-    url = url.strip()
-
-    if not url:
-        return None
-
-    return urljoin(
-        REACTOR_BASE_URL,
-        url,
-    )
-
-
-def extract_reactor_post_links(
-    soup,
-):
-
-    links = []
-
-    for a in soup.find_all("a"):
-
-        href = a.get("href")
-
-        if not href:
-            continue
-
-        href = normalize_reactor_url(href)
-
-        if not href:
-            continue
-
-        if "/post/" not in href.lower():
-            continue
-
-        if href not in links:
-            links.append(href)
-
-    return links
-
-
-def extract_images_from_post(
-    soup,
-):
-
-    images = []
-
-    for img in soup.find_all("img"):
-
-        possible_urls = [
-            img.get("data-src"),
-            img.get("data-original"),
-            img.get("data-lazy-src"),
-            img.get("src"),
-        ]
-
-        for src in possible_urls:
-
-            if not src:
-                continue
-
-            src = normalize_reactor_url(src)
-
-            if not src:
-                continue
-
-            lowered = src.lower()
-
-            if any(
-                x in lowered
-                for x in (
-                    "/avatar/",
-                    "/static/",
-                    "/emoji/",
-                    "/icon/",
-                    "/logo/",
-                    "favicon",
-                )
-            ):
-
-                continue
-
-            if not any(
-                ext in lowered
-                for ext in (
-                    ".jpg",
-                    ".jpeg",
-                    ".png",
-                    ".webp",
-                    ".gif",
-                )
-            ):
-
-                continue
-
-            if src not in images:
-                images.append(src)
-
-    return images
-
-
-def reactor_check_image(
-    image_url,
-):
-
-    try:
-
-        response = requests.get(
-            image_url,
-            headers={
-                "User-Agent":
-                    REACTOR_HEADERS[
-                        "User-Agent"
-                    ],
-                "Accept":
-                    "image/avif,image/webp,"
-                    "image/apng,image/*,*/*;q=0.8",
-            },
-            timeout=20,
-            stream=True,
-        )
-
-        status = response.status_code
-
-        content_type = (
-            response.headers.get(
-                "Content-Type",
-                "",
-            )
-            .lower()
-        )
-
-        response.close()
-
-        if status != 200:
-            return False
-
-        if content_type.startswith("image/"):
-            return True
-
-        return any(
-            ext in image_url.lower()
-            for ext in (
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".gif",
-            )
-        )
-
-    except requests.RequestException:
-
-        return False
-
-
-# =========================================================
-# REACTOR SEARCH
-# =========================================================
-
-def get_reactor_games():
+def get_rule34_games():
 
     print(
-        "[Reactor Games] "
-        "Начинаем поиск mature game art..."
+        "[Rule34 Games] "
+        "Ищем игровой арт..."
     )
 
-    # Перемешиваем игры, чтобы не было постоянного
-    # порядка и одной и той же игры.
-    game_tags = list(GAME_TAGS)
+    games = (
+        RULE34_GAME_TAGS.copy()
+    )
 
-    random.shuffle(game_tags)
+    random.shuffle(
+        games
+    )
 
-    # Каждый запуск пробует несколько игровых тегов.
-    games_to_try = game_tags[:20]
+    # Несколько попыток с разными играми,
+    # чтобы одна пустая выдача не ломала /post.
+    for game_tag in games:
 
-    for game_tag in games_to_try:
-
-        mature_tags = list(
-            MATURE_GAME_TAGS
+        print(
+            "[Rule34 Games] "
+            f"Пробуем тег: "
+            f"{game_tag}"
         )
 
-        random.shuffle(
-            mature_tags
-        )
+        params = {
+            "page": "dapi",
+            "s": "post",
+            "q": "index",
+            "json": "1",
 
-        # Пробуем несколько mature-вариантов
-        # для конкретной игры.
-        mature_to_try = mature_tags[:5]
+            # Безопасный игровой арт.
+            "tags": (
+                f"{game_tag} "
+                "rating:s "
+                "sort:random"
+            ),
 
-        for mature_tag in mature_to_try:
+            "limit": "100",
+        }
 
-            search_tag = (
-                f"{game_tag} {mature_tag}"
+        try:
+
+            response = requests.get(
+                RULE34_API,
+                params=params,
+                headers=RULE34_HEADERS,
+                timeout=30,
             )
 
             print(
-                "[Reactor Games] "
-                f"Поиск: {search_tag}"
+                "[Rule34 Games] "
+                f"HTTP: "
+                f"{response.status_code}"
             )
 
-            encoded_tag = quote(
-                search_tag,
-                safe="",
+            response.raise_for_status()
+
+            data = response.json()
+
+        except Exception as error:
+
+            print(
+                "[Rule34 Games] "
+                f"Ошибка API: {error}"
             )
 
-            tag_url = (
-                f"{REACTOR_BASE_URL}/tag/"
-                f"{encoded_tag}"
+            continue
+
+        if not isinstance(
+            data,
+            list,
+        ):
+
+            print(
+                "[Rule34 Games] "
+                "Некорректный ответ"
             )
 
-            try:
+            continue
 
-                response = requests.get(
-                    tag_url,
-                    headers=REACTOR_HEADERS,
-                    timeout=30,
+        if not data:
+
+            print(
+                "[Rule34 Games] "
+                f"Нет результатов "
+                f"для {game_tag}"
+            )
+
+            continue
+
+        random.shuffle(
+            data
+        )
+
+        # Сначала ищем ещё не отправлявшийся пост.
+        for post in data:
+
+            post_id = post.get(
+                "id"
+            )
+
+            if rule34_was_used(
+                post_id
+            ):
+                continue
+
+            image_url = (
+                post.get(
+                    "file_url"
                 )
-
-                print(
-                    "[Reactor Games] "
-                    f"HTTP {response.status_code}"
+                or post.get(
+                    "sample_url"
                 )
+            )
 
-                if response.status_code != 200:
-                    continue
+            if not image_url:
+                continue
 
-                soup = BeautifulSoup(
-                    response.text,
-                    "html.parser",
-                )
+            rule34_mark_used(
+                post_id
+            )
 
-                post_links = (
-                    extract_reactor_post_links(
-                        soup
-                    )
-                )
+            print(
+                "[Rule34 Games] "
+                f"Выбран {game_tag}, "
+                f"post_id={post_id}"
+            )
 
-                if not post_links:
-                    continue
-
-                random.shuffle(
-                    post_links
-                )
-
-                for post_url in post_links[:10]:
-
-                    if reactor_was_used(
-                        post_url
-                    ):
-                        continue
-
-                    try:
-
-                        post_response = requests.get(
-                            post_url,
-                            headers=REACTOR_HEADERS,
-                            timeout=30,
-                        )
-
-                        if (
-                            post_response.status_code
-                            != 200
-                        ):
-                            continue
-
-                        post_soup = BeautifulSoup(
-                            post_response.text,
-                            "html.parser",
-                        )
-
-                        image_urls = (
-                            extract_images_from_post(
-                                post_soup
-                            )
-                        )
-
-                        if not image_urls:
-                            continue
-
-                        random.shuffle(
-                            image_urls
-                        )
-
-                        for image_url in image_urls:
-
-                            image_key = (
-                                f"{post_url}|"
-                                f"{image_url}"
-                            )
-
-                            if reactor_was_used(
-                                image_key
-                            ):
-                                continue
-
-                            if not reactor_check_image(
-                                image_url
-                            ):
-                                continue
-
-                            reactor_mark_used(
-                                post_url
-                            )
-
-                            reactor_mark_used(
-                                image_key
-                            )
-
-                            print(
-                                "[Reactor Games] "
-                                "Найден новый пост"
-                            )
-
-                            print(
-                                f"[Reactor Games] "
-                                f"Игра: {game_tag}"
-                            )
-
-                            print(
-                                f"[Reactor Games] "
-                                f"Mature tag: "
-                                f"{mature_tag}"
-                            )
-
-                            return {
-                                "url": image_url,
-                                "source":
-                                    "Reactor Games",
-                                "tag":
-                                    search_tag,
-                                "game_tag":
-                                    game_tag,
-                                "mature_tag":
-                                    mature_tag,
-                                "post_url":
-                                    post_url,
-                            }
-
-                    except requests.RequestException as error:
-
-                        print(
-                            "[Reactor Games] "
-                            f"Ошибка поста: "
-                            f"{error}"
-                        )
-
-            except requests.RequestException as error:
-
-                print(
-                    "[Reactor Games] "
-                    f"Ошибка запроса: "
-                    f"{error}"
-                )
-
-            time.sleep(0.4)
+            return {
+                "url": image_url,
+                "source": (
+                    "Rule34 Games"
+                ),
+                "post_id": post_id,
+                "game_tag": game_tag,
+            }
 
     raise RuntimeError(
-        "Reactor: "
-        "не найден новый пост "
-        "по проверенным игровым/mature тегам"
+        "Rule34 Games: "
+        "не удалось найти "
+        "новый игровой пост"
     )
 
 
@@ -820,11 +593,13 @@ def get_random_pexels():
     if not PEXELS_API_KEY:
 
         raise RuntimeError(
-            "PEXELS_API_KEY не настроен"
+            "PEXELS_API_KEY "
+            "не настроен"
         )
 
     print(
-        "[Pexels] Получаем изображение..."
+        "[Pexels] "
+        "Получаем изображение..."
     )
 
     queries = [
@@ -834,7 +609,6 @@ def get_random_pexels():
         "fantasy game art",
         "cosplay",
         "gaming character",
-        "digital game art",
     ]
 
     random.shuffle(
@@ -845,7 +619,7 @@ def get_random_pexels():
         "Authorization":
             PEXELS_API_KEY,
         "User-Agent":
-            "GameArtPoster/1.0",
+            "GamePoster/1.0",
     }
 
     for query in queries:
@@ -879,32 +653,31 @@ def get_random_pexels():
         if not photos:
             continue
 
-        random.shuffle(
+        photo = random.choice(
             photos
         )
 
-        for photo in photos:
+        src = photo.get(
+            "src",
+            {},
+        )
 
-            src = photo.get(
-                "src",
-                {},
-            )
+        image_url = (
+            src.get("large2x")
+            or src.get("large")
+            or src.get("original")
+        )
 
-            image_url = (
-                src.get("large2x")
-                or src.get("large")
-                or src.get("original")
-            )
+        if image_url:
 
-            if image_url:
-
-                return {
-                    "url": image_url,
-                    "source": "Pexels",
-                }
+            return {
+                "url": image_url,
+                "source": "Pexels",
+            }
 
     raise RuntimeError(
-        "Pexels не вернул изображения"
+        "Pexels "
+        "не вернул изображения"
     )
 
 
@@ -913,7 +686,7 @@ def get_random_pexels():
 # =========================================================
 
 def download_image(
-    image_url,
+    image_url
 ):
 
     response = requests.get(
@@ -926,31 +699,32 @@ def download_image(
 
     content = response.content
 
-    if len(content) > 8 * 1024 * 1024:
+    if len(content) > (
+        8 * 1024 * 1024
+    ):
 
         raise RuntimeError(
-            "Изображение больше 8 MB"
+            "Изображение "
+            "больше 8 MB"
         )
 
-    content_type = response.headers.get(
-        "Content-Type",
-        "image/jpeg",
+    content_type = (
+        response.headers.get(
+            "Content-Type",
+            "image/jpeg",
+        )
     )
 
     if "png" in content_type:
-
         extension = "png"
 
     elif "webp" in content_type:
-
         extension = "webp"
 
     elif "gif" in content_type:
-
         extension = "gif"
 
     else:
-
         extension = "jpg"
 
     return (
@@ -965,11 +739,16 @@ def download_image(
 # =========================================================
 
 def send_to_discord(
-    image,
+    image
 ):
 
-    source = image["source"]
-    image_url = image["url"]
+    source = image[
+        "source"
+    ]
+
+    image_url = image[
+        "url"
+    ]
 
     webhook_map = {
 
@@ -983,14 +762,14 @@ def send_to_discord(
             "🎨 Anime Art",
         ),
 
-        "Reactor Games": (
-            REACTOR_GAMES_WEBHOOK_URL,
-            "🎮 Mature Game Art",
+        "Rule34 Games": (
+            RULE34_GAMES_WEBHOOK_URL,
+            "🎮 Game Art",
         ),
 
         "Pexels": (
             PEXELS_WEBHOOK_URL,
-            "📷 Game / Fashion",
+            "📷 Game / Fashion Art",
         ),
     }
 
@@ -1020,29 +799,13 @@ def send_to_discord(
         image_url
     )
 
-    content = (
-        f"{message}\n"
-        f"Источник: {source}"
-    )
-
-    if image.get("game_tag"):
-
-        content += (
-            f"\nИгра: "
-            f"{image['game_tag']}"
-        )
-
-    if image.get("mature_tag"):
-
-        content += (
-            f"\nТег: "
-            f"{image['mature_tag']}"
-        )
-
     response = requests.post(
         webhook_url,
         data={
-            "content": content
+            "content": (
+                f"{message}\n"
+                f"Источник: {source}"
+            )
         },
         files={
             "file": (
@@ -1142,12 +905,12 @@ def post_image():
             )
         )
 
-    if REACTOR_GAMES_WEBHOOK_URL:
+    if RULE34_GAMES_WEBHOOK_URL:
 
         sources.append(
             (
-                "Reactor Games",
-                get_reactor_games,
+                "Rule34 Games",
+                get_rule34_games,
             )
         )
 
@@ -1253,21 +1016,13 @@ def status():
                 and DANBOORU_API_KEY
             ),
 
-            "reactor_games": bool(
-                REACTOR_GAMES_WEBHOOK_URL
+            "rule34_games": bool(
+                RULE34_GAMES_WEBHOOK_URL
             ),
 
             "pexels": bool(
                 PEXELS_WEBHOOK_URL
                 and PEXELS_API_KEY
-            ),
-
-            "game_tags": len(
-                GAME_TAGS
-            ),
-
-            "mature_tags": len(
-                MATURE_GAME_TAGS
             ),
         },
     }
@@ -1294,7 +1049,7 @@ def ping():
 def home():
 
     return Response(
-        "Game Art Poster is running.",
+        "Game Poster is running.",
         status=200,
     )
 
@@ -1316,3 +1071,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
+```
