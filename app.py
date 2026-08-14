@@ -1,9 +1,10 @@
+```python
 import os
 import random
 import threading
 import time
 import json
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
 
 import requests
 from bs4 import BeautifulSoup
@@ -54,19 +55,388 @@ DANBOORU_API = "https://danbooru.donmai.us"
 
 PEXELS_API = "https://api.pexels.com/v1"
 
-# Reactor:
-# случайные страницы будут иметь вид:
-# /tag/Игровая+эротика/new/1
-# /tag/Игровая+эротика/new/2
-# /tag/Игровая+эротика/new/3
-# и т.д.
+REACTOR_BASE_URL = "https://reactor.cc/tag/"
 
-REACTOR_TAG_URL = (
-    "https://reactor.cc/tag/"
-    "Игровая+эротика"
-)
 
-REACTOR_MAX_PAGE = 500
+# =========================================================
+# REACTOR SETTINGS
+# =========================================================
+
+# Максимальная страница, которую бот будет пробовать.
+# Если страница не существует, бот попробует другую.
+REACTOR_MAX_PAGE = 100
+
+
+# Сколько картинок хранить в памяти.
+# На Render память файла может сбрасываться после
+# перезапуска сервиса.
+MAX_REACTOR_MEMORY = 1000
+
+
+REACTOR_MEMORY_FILE = "reactor_seen.json"
+
+
+# =========================================================
+# REACTOR TAGS
+# English + Russian
+# =========================================================
+
+REACTOR_GAME_TAGS = [
+
+    # -----------------------------------------------------
+    # Warhammer
+    # -----------------------------------------------------
+
+    "Warhammer 40000",
+    "Warhammer 40k",
+    "Вархаммер 40000",
+    "Вархаммер",
+
+    # -----------------------------------------------------
+    # Genshin
+    # -----------------------------------------------------
+
+    "Genshin Impact",
+    "Геншин Импакт",
+
+    # -----------------------------------------------------
+    # Nier
+    # -----------------------------------------------------
+
+    "Nier Automata",
+    "NieR Automata",
+    "Nier",
+    "Ниер Автомата",
+
+    # -----------------------------------------------------
+    # Street Fighter
+    # -----------------------------------------------------
+
+    "Street Fighter",
+    "Стрит Файтер",
+
+    # -----------------------------------------------------
+    # Furry
+    # -----------------------------------------------------
+
+    "Furry",
+    "Фурри",
+
+    # -----------------------------------------------------
+    # VTubers
+    # -----------------------------------------------------
+
+    "VTuber",
+    "VTubers",
+    "Витубер",
+    "Витуберы",
+
+    # -----------------------------------------------------
+    # Dota
+    # -----------------------------------------------------
+
+    "Dota 2",
+    "Dota",
+    "Дота 2",
+    "Дота",
+
+    # -----------------------------------------------------
+    # Apex
+    # -----------------------------------------------------
+
+    "Apex Legends",
+    "Apex",
+    "Апекс Легендс",
+
+    # -----------------------------------------------------
+    # Team Fortress
+    # -----------------------------------------------------
+
+    "Team Fortress 2",
+    "Team Fortress",
+    "Тим Фортресс 2",
+
+    # -----------------------------------------------------
+    # Mortal Kombat
+    # -----------------------------------------------------
+
+    "Mortal Kombat",
+    "Mortal Kombat 1",
+    "Mortal Kombat X",
+    "Mortal Kombat 11",
+    "Mortal Kombat 12",
+    "Мортал Комбат",
+
+    # -----------------------------------------------------
+    # Resident Evil
+    # -----------------------------------------------------
+
+    "Resident Evil",
+    "Resident Evil 2",
+    "Resident Evil 3",
+    "Resident Evil 4",
+    "Resident Evil 5",
+    "Resident Evil 6",
+    "Resident Evil 7",
+    "Resident Evil Village",
+    "Резидент Ивел",
+
+    # -----------------------------------------------------
+    # Game Art
+    # -----------------------------------------------------
+
+    "Game Art",
+    "Gaming Art",
+    "Video Game Art",
+    "Игровой арт",
+    "Игровой арт",
+
+    # -----------------------------------------------------
+    # Zenless Zone Zero
+    # -----------------------------------------------------
+
+    "Zenless Zone Zero",
+    "ZZZ",
+    "Zenless",
+    "Зенлесс Зон Зеро",
+
+    # -----------------------------------------------------
+    # Metal Gear
+    # -----------------------------------------------------
+
+    "Metal Gear Solid",
+    "Metal Gear Rising",
+    "Metal Gear",
+    "Метал Гир Солид",
+    "Метал Гир Райзинг",
+
+    # -----------------------------------------------------
+    # Everlasting Summer
+    # -----------------------------------------------------
+
+    "Everlasting Summer",
+    "Бесконечное лето",
+
+    # -----------------------------------------------------
+    # Doki Doki
+    # -----------------------------------------------------
+
+    "Doki Doki Literature Club",
+    "Doki Doki",
+    "DDLC",
+    "Доки Доки Литературный Клуб",
+
+    # -----------------------------------------------------
+    # Minecraft
+    # -----------------------------------------------------
+
+    "Minecraft",
+    "Майнкрафт",
+
+    # -----------------------------------------------------
+    # Skullgirls
+    # -----------------------------------------------------
+
+    "Skullgirls",
+    "Skull Girls",
+    "Скаллгерлс",
+
+    # -----------------------------------------------------
+    # Vermintide
+    # -----------------------------------------------------
+
+    "Warhammer Vermintide",
+    "Vermintide",
+    "Warhammer Vermintide 2",
+    "Вархаммер Вермінтайд",
+    "Вермінтайд",
+
+    # -----------------------------------------------------
+    # DOOM
+    # -----------------------------------------------------
+
+    "DOOM",
+    "Doom",
+    "Дум",
+
+    # -----------------------------------------------------
+    # Project Zomboid
+    # -----------------------------------------------------
+
+    "Project Zomboid",
+    "Зомбоид",
+    "Проект Зомбоид",
+
+    # -----------------------------------------------------
+    # Portal
+    # -----------------------------------------------------
+
+    "Portal",
+    "Portal 2",
+    "Портал",
+
+    # -----------------------------------------------------
+    # Mass Effect
+    # -----------------------------------------------------
+
+    "Mass Effect",
+    "Mass Effect 2",
+    "Mass Effect 3",
+    "Масс Эффект",
+
+    # -----------------------------------------------------
+    # World of Warcraft
+    # -----------------------------------------------------
+
+    "World of Warcraft",
+    "WoW",
+    "Warcraft",
+    "Варкрафт",
+    "Ворлд оф Варкрафт",
+
+    # -----------------------------------------------------
+    # Deadlock
+    # -----------------------------------------------------
+
+    "Deadlock",
+    "Дедлок",
+
+    # -----------------------------------------------------
+    # Helldivers
+    # -----------------------------------------------------
+
+    "Helldivers",
+    "Helldivers 2",
+    "Хеллдайверс",
+
+    # -----------------------------------------------------
+    # Wuthering Waves
+    # -----------------------------------------------------
+
+    "Wuthering Waves",
+    "Wuwa",
+    "Ватеринг Вейвс",
+
+    # -----------------------------------------------------
+    # Arknights
+    # -----------------------------------------------------
+
+    "Arknights",
+    "Arknight",
+    "Аркнайтс",
+
+    # -----------------------------------------------------
+    # Arknights Endfield
+    # -----------------------------------------------------
+
+    "Arknights Endfield",
+    "Endfield",
+    "Аркнайтс Эндфилд",
+
+    # -----------------------------------------------------
+    # Batman
+    # -----------------------------------------------------
+
+    "Batman",
+    "Batman Arkham",
+    "Бэтмен",
+
+    # -----------------------------------------------------
+    # Darksiders
+    # -----------------------------------------------------
+
+    "Darksiders",
+    "Darksiders II",
+    "Darksiders III",
+    "Darksiders Genesis",
+    "Дарксайдерс",
+
+    # -----------------------------------------------------
+    # Devil May Cry
+    # -----------------------------------------------------
+
+    "Devil May Cry",
+    "DMC",
+    "Devil May Cry 5",
+    "Девил Май Край",
+
+    # -----------------------------------------------------
+    # Fallout
+    # -----------------------------------------------------
+
+    "Fallout",
+    "Fallout 3",
+    "Fallout 4",
+    "Fallout New Vegas",
+    "Фоллаут",
+
+    # -----------------------------------------------------
+    # FNAF
+    # -----------------------------------------------------
+
+    "Five Nights at Freddy's",
+    "FNAF",
+    "Five Nights at Freddys",
+    "Фнаф",
+
+    # -----------------------------------------------------
+    # Halo
+    # -----------------------------------------------------
+
+    "Halo",
+    "Halo Infinite",
+    "Halo 4",
+    "Halo 5",
+    "Хало",
+
+    # -----------------------------------------------------
+    # Overwatch
+    # -----------------------------------------------------
+
+    "Overwatch",
+    "Overwatch 2",
+    "Овервотч",
+
+    # -----------------------------------------------------
+    # Fortnite
+    # -----------------------------------------------------
+
+    "Fortnite",
+    "Фортнайт",
+
+    # -----------------------------------------------------
+    # Far Cry
+    # -----------------------------------------------------
+
+    "Far Cry",
+    "Far Cry 3",
+    "Far Cry 4",
+    "Far Cry 5",
+    "Far Cry 6",
+    "Фар Край",
+
+    # -----------------------------------------------------
+    # PUBG
+    # -----------------------------------------------------
+
+    "PUBG",
+    "PlayerUnknown's Battlegrounds",
+    "Пабг",
+
+    # -----------------------------------------------------
+    # Helltaker
+    # -----------------------------------------------------
+
+    "Helltaker",
+    "Хеллтейкер",
+
+    # -----------------------------------------------------
+    # Awaria
+    # -----------------------------------------------------
+
+    "Awaria",
+
+]
 
 
 # =========================================================
@@ -75,10 +445,11 @@ REACTOR_MAX_PAGE = 500
 
 DEFAULT_HEADERS = {
     "User-Agent": (
-        "AnimePoster/1.0 "
-        "(Discord image poster)"
+        "Mozilla/5.0 "
+        "(compatible; AnimePoster/1.0)"
     )
 }
+
 
 DANBOORU_HEADERS = {
     "User-Agent": (
@@ -87,6 +458,7 @@ DANBOORU_HEADERS = {
     ),
     "Accept": "application/json",
 }
+
 
 REACTOR_HEADERS = {
     "User-Agent": (
@@ -101,110 +473,80 @@ REACTOR_HEADERS = {
         "ru-RU,ru;q=0.9,en;q=0.8"
     ),
     "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
 }
 
 
 # =========================================================
-# REACTOR HISTORY
+# REACTOR MEMORY
 # =========================================================
-
-REACTOR_HISTORY_FILE = "reactor_seen.json"
 
 REACTOR_LOCK = threading.Lock()
 
-REACTOR_SEEN = set()
 
-MAX_REACTOR_HISTORY = 5000
-
-
-def load_reactor_history():
-
-    global REACTOR_SEEN
+def load_reactor_memory():
 
     try:
 
         if not os.path.exists(
-            REACTOR_HISTORY_FILE
+            REACTOR_MEMORY_FILE
         ):
-            return
+
+            return set()
 
         with open(
-            REACTOR_HISTORY_FILE,
+            REACTOR_MEMORY_FILE,
             "r",
             encoding="utf-8",
         ) as file:
 
             data = json.load(file)
 
-        if isinstance(data, list):
+        if not isinstance(
+            data,
+            list,
+        ):
 
-            REACTOR_SEEN = set(
-                str(item)
-                for item in data
-                if item
-            )
+            return set()
 
-        print(
-            "[Reactor] "
-            f"Загружено из истории: "
-            f"{len(REACTOR_SEEN)}"
-        )
+        return set(data)
 
     except Exception as error:
 
         print(
-            "[Reactor] "
-            f"Не удалось загрузить историю: "
-            f"{error}"
+            "[Reactor Memory] "
+            f"Ошибка чтения: {error}"
         )
 
-        REACTOR_SEEN = set()
+        return set()
 
 
-def save_reactor_history():
+REACTOR_USED = load_reactor_memory()
+
+
+def save_reactor_memory():
 
     try:
 
-        data = list(
-            REACTOR_SEEN
-        )
-
-        if len(data) > MAX_REACTOR_HISTORY:
-
-            data = data[
-                -MAX_REACTOR_HISTORY:
-            ]
-
-        temp_file = (
-            REACTOR_HISTORY_FILE
-            + ".tmp"
-        )
-
         with open(
-            temp_file,
+            REACTOR_MEMORY_FILE,
             "w",
             encoding="utf-8",
         ) as file:
 
             json.dump(
-                data,
+                list(REACTOR_USED)[
+                    -MAX_REACTOR_MEMORY:
+                ],
                 file,
                 ensure_ascii=False,
                 indent=2,
             )
 
-        os.replace(
-            temp_file,
-            REACTOR_HISTORY_FILE,
-        )
-
     except Exception as error:
 
         print(
-            "[Reactor] "
-            f"Не удалось сохранить историю: "
-            f"{error}"
+            "[Reactor Memory] "
+            f"Ошибка сохранения: {error}"
         )
 
 
@@ -212,38 +554,24 @@ def reactor_was_used(url):
 
     with REACTOR_LOCK:
 
-        return url in REACTOR_SEEN
+        return (
+            url in REACTOR_USED
+        )
 
 
 def reactor_mark_used(url):
 
     with REACTOR_LOCK:
 
-        REACTOR_SEEN.add(url)
+        REACTOR_USED.add(url)
 
-        # Обрезаем историю, если она стала
-        # слишком большой.
-        if len(REACTOR_SEEN) > (
-            MAX_REACTOR_HISTORY + 500
-        ):
+        while len(
+            REACTOR_USED
+        ) > MAX_REACTOR_MEMORY:
 
-            items = list(
-                REACTOR_SEEN
-            )
+            REACTOR_USED.pop()
 
-            REACTOR_SEEN.clear()
-
-            REACTOR_SEEN.update(
-                items[
-                    -MAX_REACTOR_HISTORY:
-                ]
-            )
-
-        save_reactor_history()
-
-
-# Загружаем историю при запуске приложения.
-load_reactor_history()
+        save_reactor_memory()
 
 
 # =========================================================
@@ -267,7 +595,9 @@ def danbooru_wait():
             now - LAST_DANBOORU_REQUEST
         )
 
-        wait_time = 1.2 - elapsed
+        wait_time = (
+            1.2 - elapsed
+        )
 
         if wait_time > 0:
 
@@ -413,7 +743,7 @@ def get_random_danbooru(
 
     if response.status_code == 422:
 
-        body = response.text[:1500]
+        body = response.text[:1000]
 
         print(
             f"[{source_name}] "
@@ -489,24 +819,35 @@ def get_danbooru_anime():
 
 
 # =========================================================
-# REACTOR HELPERS
+# REACTOR URL
 # =========================================================
 
-def reactor_page_url(page):
+def reactor_page_url(
+    tag,
+    page=1,
+):
+
+    encoded_tag = quote(
+        tag,
+        safe="",
+    )
 
     if page <= 1:
 
         return (
-            REACTOR_TAG_URL
-            + "/new"
+            f"{REACTOR_BASE_URL}"
+            f"{encoded_tag}"
         )
 
     return (
-        REACTOR_TAG_URL
-        + "/new/"
-        + str(page)
+        f"{REACTOR_BASE_URL}"
+        f"{encoded_tag}/new/{page}"
     )
 
+
+# =========================================================
+# REACTOR IMAGE EXTRACTION
+# =========================================================
 
 def extract_reactor_images(
     html,
@@ -520,27 +861,28 @@ def extract_reactor_images(
 
     candidates = []
 
-    # -----------------------------------------------------
-    # 1. img
-    # -----------------------------------------------------
-
     for img in soup.find_all(
         "img"
     ):
 
         possible_urls = [
+
             img.get(
                 "data-src"
             ),
+
             img.get(
                 "data-original"
             ),
+
             img.get(
                 "data-lazy-src"
             ),
+
             img.get(
                 "src"
             ),
+
         ]
 
         for src in possible_urls:
@@ -560,20 +902,15 @@ def extract_reactor_images(
 
             lowered = src.lower()
 
-            if not lowered.startswith(
-                (
-                    "http://",
-                    "https://",
-                )
-            ):
+            # Только картинки постов.
+            if "/pics/post/" not in lowered:
                 continue
 
-            # Не берём аватарки,
-            # логотипы и интерфейс.
+            # Исключаем служебные изображения.
             if any(
                 value in lowered
                 for value in (
-                    "avatar",
+                    "/avatar/",
                     "/static/",
                     "/emoji/",
                     "/icon/",
@@ -584,95 +921,26 @@ def extract_reactor_images(
 
                 continue
 
-            # Reactor CDN.
-            if (
-                "/pics/post/"
-                not in lowered
-            ):
-                continue
-
             candidates.append(
                 src
             )
 
-    # -----------------------------------------------------
-    # 2. Ссылки на изображения
-    # -----------------------------------------------------
-
-    for link in soup.find_all(
-        "a"
-    ):
-
-        href = link.get(
-            "href"
+    # Убираем дубликаты.
+    candidates = list(
+        dict.fromkeys(
+            candidates
         )
+    )
 
-        if not href:
-            continue
+    return candidates
 
-        href = urljoin(
-            page_url,
-            href,
-        )
 
-        lowered = href.lower()
-
-        if (
-            "/pics/post/"
-            not in lowered
-        ):
-            continue
-
-        if any(
-            value in lowered
-            for value in (
-                "avatar",
-                "/static/",
-                "/emoji/",
-                "/icon/",
-                "/logo/",
-            )
-        ):
-
-            continue
-
-        candidates.append(
-            href
-        )
-
-    # -----------------------------------------------------
-    # Удаляем дубли
-    # -----------------------------------------------------
-
-    unique = []
-
-    seen = set()
-
-    for url in candidates:
-
-        # Убираем query-параметры
-        # для сравнения.
-        clean_url = url.split(
-            "?",
-            1
-        )[0]
-
-        if clean_url in seen:
-            continue
-
-        seen.add(
-            clean_url
-        )
-
-        unique.append(
-            clean_url
-        )
-
-    return unique
-
+# =========================================================
+# REACTOR IMAGE CHECK
+# =========================================================
 
 def check_reactor_image(
-    image_url,
+    image_url
 ):
 
     try:
@@ -686,8 +954,7 @@ def check_reactor_image(
                     ],
                 "Accept":
                     "image/avif,image/webp,"
-                    "image/apng,image/*,"
-                    "*/*;q=0.8",
+                    "image/apng,image/*,*/*;q=0.8",
             },
             timeout=20,
             stream=True,
@@ -714,12 +981,12 @@ def check_reactor_image(
                 "image/"
             )
         ):
+
             return True
 
-        lowered = image_url.lower()
-
-        return lowered.endswith(
-            (
+        return any(
+            extension in image_url.lower()
+            for extension in (
                 ".jpg",
                 ".jpeg",
                 ".png",
@@ -734,35 +1001,42 @@ def check_reactor_image(
 
 
 # =========================================================
-# REACTOR GAMES
+# REACTOR
 # =========================================================
 
 def get_reactor_games():
 
     print(
         "[Reactor Games] "
-        "Ищем новую страницу..."
+        "Выбираем случайный тег..."
     )
 
-    # Берём несколько случайных страниц.
-    pages = list(
-        range(
-            1,
-            REACTOR_MAX_PAGE + 1,
-        )
+    tags = (
+        REACTOR_GAME_TAGS.copy()
     )
 
     random.shuffle(
-        pages
+        tags
     )
 
-    # Проверяем до 8 страниц за один запуск.
-    pages_to_try = pages[:8]
+    # Пробуем несколько разных тегов.
+    for tag in tags:
 
-    for page in pages_to_try:
+        # Не всегда большая страница существует.
+        # Поэтому случайно выбираем страницу.
+        page = random.randint(
+            1,
+            REACTOR_MAX_PAGE,
+        )
 
         page_url = reactor_page_url(
-            page
+            tag,
+            page,
+        )
+
+        print(
+            "[Reactor Games] "
+            f"Тег: {tag}"
         )
 
         print(
@@ -785,7 +1059,6 @@ def get_reactor_games():
             )
 
             if response.status_code != 200:
-
                 continue
 
             candidates = (
@@ -797,20 +1070,14 @@ def get_reactor_games():
 
             print(
                 "[Reactor Games] "
-                f"Страница {page}: "
-                f"найдено "
-                f"{len(candidates)} "
-                f"кандидатов"
+                f"Кандидатов: "
+                f"{len(candidates)}"
             )
 
             if not candidates:
-
                 continue
 
-            # -------------------------------------------------
-            # Сначала только новые изображения.
-            # -------------------------------------------------
-
+            # Сначала только новые картинки.
             unused = [
                 url
                 for url in candidates
@@ -819,13 +1086,13 @@ def get_reactor_games():
                 )
             ]
 
-            print(
-                "[Reactor Games] "
-                f"Новых: "
-                f"{len(unused)}"
-            )
-
             if not unused:
+
+                print(
+                    "[Reactor Games] "
+                    "Все картинки этой "
+                    "страницы уже использованы"
+                )
 
                 continue
 
@@ -833,22 +1100,18 @@ def get_reactor_games():
                 unused
             )
 
-            # -------------------------------------------------
-            # Проверяем несколько кандидатов.
-            # -------------------------------------------------
-
+            # Проверяем до 20 кандидатов.
             for image_url in unused[:20]:
-
-                print(
-                    "[Reactor Games] "
-                    "Проверяем: "
-                    f"{image_url}"
-                )
 
                 if not check_reactor_image(
                     image_url
                 ):
+
                     continue
+
+                reactor_mark_used(
+                    image_url
+                )
 
                 print(
                     "[Reactor Games] "
@@ -858,15 +1121,17 @@ def get_reactor_games():
 
                 return {
                     "url": image_url,
-                    "source":
-                        "Reactor Games",
+                    "source": (
+                        "Reactor Games"
+                    ),
+                    "tag": tag,
                 }
 
         except requests.RequestException as error:
 
             print(
                 "[Reactor Games] "
-                f"Ошибка страницы: "
+                f"Ошибка запроса: "
                 f"{error}"
             )
 
@@ -874,19 +1139,14 @@ def get_reactor_games():
 
             print(
                 "[Reactor Games] "
-                f"Ошибка парсинга: "
+                f"Ошибка: "
                 f"{error}"
             )
 
-    # -----------------------------------------------------
-    # Если все случайные страницы уже просмотрены,
-    # сообщаем об этом вместо повторной картинки.
-    # -----------------------------------------------------
-
     raise RuntimeError(
         "Reactor: "
-        "не найдено новое изображение "
-        "на проверенных страницах"
+        "не удалось найти "
+        "новое изображение"
     )
 
 
@@ -925,6 +1185,7 @@ def get_random_pexels():
     headers = {
         "Authorization":
             PEXELS_API_KEY,
+
         "User-Agent":
             "AnimePoster/1.0",
     }
@@ -937,10 +1198,7 @@ def get_random_pexels():
             params={
                 "query": query,
                 "per_page": 80,
-                "page": random.randint(
-                    1,
-                    5,
-                ),
+                "page": 1,
             },
             timeout=30,
         )
@@ -994,8 +1252,8 @@ def get_random_pexels():
                 }
 
     raise RuntimeError(
-        "Pexels "
-        "не вернул изображения"
+        "Pexels не вернул "
+        "изображения"
     )
 
 
@@ -1004,7 +1262,7 @@ def get_random_pexels():
 # =========================================================
 
 def download_image(
-    image_url,
+    image_url
 ):
 
     response = requests.get(
@@ -1061,7 +1319,7 @@ def download_image(
 # =========================================================
 
 def send_to_discord(
-    image,
+    image
 ):
 
     source = image[
@@ -1093,6 +1351,7 @@ def send_to_discord(
             PEXELS_WEBHOOK_URL,
             "📷 Fashion / Glamour",
         ),
+
     }
 
     if source not in webhook_map:
@@ -1109,7 +1368,8 @@ def send_to_discord(
     if not webhook_url:
 
         raise RuntimeError(
-            f"Webhook для {source} "
+            f"Webhook для "
+            f"{source} "
             "не настроен"
         )
 
@@ -1158,20 +1418,6 @@ def publish_source(
         send_to_discord(
             image
         )
-
-        # ВАЖНО:
-        # отмечаем Reactor как использованный
-        # только после успешной отправки
-        # в Discord.
-
-        if (
-            name
-            == "Reactor Games"
-        ):
-
-            reactor_mark_used(
-                image["url"]
-            )
 
         print(
             f"[{name}] "
@@ -1287,6 +1533,7 @@ def post_image():
 
     results = []
 
+    # Источники запускаются независимо.
     for name, getter in sources:
 
         results.append(
@@ -1341,7 +1588,8 @@ def post_image():
 
     return Response(
         f"OK - successful: "
-        f"{successful}, errors: {errors}",
+        f"{successful}, errors: "
+        f"{errors}",
         status=200,
     )
 
@@ -1376,17 +1624,16 @@ def status():
                 PEXELS_WEBHOOK_URL
                 and PEXELS_API_KEY
             ),
+
         },
 
-        "reactor": {
-            "tag": (
-                "Игровая эротика"
-            ),
-            "max_page":
-                REACTOR_MAX_PAGE,
-            "seen":
-                len(REACTOR_SEEN),
-        },
+        "reactor_tags": len(
+            REACTOR_GAME_TAGS
+        ),
+
+        "reactor_memory": len(
+            REACTOR_USED
+        ),
     }
 
 
@@ -1433,3 +1680,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
+```
