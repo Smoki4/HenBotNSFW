@@ -36,6 +36,17 @@ DANBOORU_API_KEY = os.environ.get(
 
 
 # =========================================================
+# SETTINGS
+# =========================================================
+
+MAX_FILE_SIZE = 8 * 1024 * 1024
+
+# Сколько разных Danbooru Games постов
+# пробовать при ошибке Discord 20009.
+MAX_DISCORD_RETRIES = 5
+
+
+# =========================================================
 # API
 # =========================================================
 
@@ -566,10 +577,6 @@ def download_image(image_url):
     from io import BytesIO
     from PIL import Image
 
-    max_size = (
-        8 * 1024 * 1024
-    )
-
     response = requests.get(
         image_url,
         headers=DEFAULT_HEADERS,
@@ -640,7 +647,7 @@ def download_image(image_url):
     # FILE <= 8 MB
     # =====================================================
 
-    if len(original_data) <= max_size:
+    if len(original_data) <= MAX_FILE_SIZE:
         content_type_lower = (
             content_type.lower()
         )
@@ -825,7 +832,7 @@ def download_image(image_url):
 
             if (
                 len(compressed_data)
-                <= max_size
+                <= MAX_FILE_SIZE
             ):
                 print(
                     "[Download] "
@@ -918,7 +925,7 @@ def download_image(image_url):
 
                 if (
                     len(compressed_data)
-                    <= max_size
+                    <= MAX_FILE_SIZE
                 ):
                     print(
                         "[Download] "
@@ -946,7 +953,37 @@ def download_image(image_url):
 
 
 # =========================================================
-# DISCORD
+# DISCORD ERROR
+# =========================================================
+
+def get_discord_error(response):
+    discord_code = None
+    discord_message = None
+
+    try:
+        data = response.json()
+
+        discord_code = data.get(
+            "code"
+        )
+
+        discord_message = data.get(
+            "message"
+        )
+
+    except ValueError:
+        discord_message = (
+            response.text
+        )
+
+    return (
+        discord_code,
+        discord_message,
+    )
+
+
+# =========================================================
+# DISCORD SEND
 # =========================================================
 
 def send_to_discord(image):
@@ -1048,7 +1085,7 @@ def send_to_discord(image):
     )
 
     # =====================================================
-    # DISCORD MESSAGE
+    # MESSAGE
     # =====================================================
 
     message_content = (
@@ -1090,7 +1127,7 @@ def send_to_discord(image):
         )
 
     # =====================================================
-    # STATUS
+    # HTTP
     # =====================================================
 
     print(
@@ -1105,8 +1142,12 @@ def send_to_discord(image):
     if response.ok:
         print(
             "[Discord] "
-            f"Успешно отправлено: "
-            f"{source}"
+            "Успешно отправлено."
+        )
+
+        print(
+            "[Discord] "
+            f"Источник: {source}"
         )
 
         print(
@@ -1116,36 +1157,34 @@ def send_to_discord(image):
 
         print(
             "[Discord] "
-            f"ID поста: {post_id}"
+            f"ID: {post_id}"
         )
 
         return
 
     # =====================================================
-    # DISCORD ERROR
+    # ERROR
     # =====================================================
 
-    discord_code = None
-    discord_message = None
+    (
+        discord_code,
+        discord_message,
+    ) = get_discord_error(
+        response
+    )
 
-    try:
-        error_data = response.json()
+    print(
+        "[Discord] "
+        f"Код ошибки: {discord_code}"
+    )
 
-        discord_code = (
-            error_data.get("code")
-        )
-
-        discord_message = (
-            error_data.get("message")
-        )
-
-    except ValueError:
-        discord_message = (
-            response.text
-        )
+    print(
+        "[Discord] "
+        f"Сообщение: {discord_message}"
+    )
 
     # =====================================================
-    # ERROR 20009
+    # 20009
     # =====================================================
 
     if (
@@ -1157,12 +1196,14 @@ def send_to_discord(image):
         )
 
         print(
-            "[Discord] ОШИБКА 20009"
+            "[Discord] "
+            "ОШИБКА 20009"
         )
 
         print(
             "[Discord] "
-            f"Сообщение: {discord_message}"
+            "Контент отклонён "
+            "получателем."
         )
 
         print(
@@ -1181,32 +1222,23 @@ def send_to_discord(image):
         )
 
         print(
-            "[Discord] "
-            "Discord не разрешил "
-            "отправку контента "
-            "этому получателю."
-        )
-
-        print(
             "======================================================="
         )
 
         raise RuntimeError(
-            "Discord HTTP 400 "
-            f"(code 20009): "
-            f"{discord_message}; "
-            f"Источник: {source}; "
-            f"Тег: {tags}; "
-            f"ID: {post_id}"
+            "DISCORD_20009"
         )
 
     # =====================================================
-    # OTHER ERROR
+    # OTHER DISCORD ERROR
     # =====================================================
 
     print(
-        "[Discord] "
-        f"Ответ: {response.text[:1000]}"
+        "[Discord] Ответ:"
+    )
+
+    print(
+        response.text[:1000]
     )
 
     raise RuntimeError(
@@ -1217,7 +1249,7 @@ def send_to_discord(image):
 
 
 # =========================================================
-# PUBLISH
+# PUBLISH NORMAL SOURCE
 # =========================================================
 
 def publish_source(
@@ -1280,6 +1312,150 @@ def publish_source(
 
 
 # =========================================================
+# PUBLISH DANBOORU GAMES WITH RETRIES
+# =========================================================
+
+def publish_danbooru_games():
+    print(
+        "======================================================="
+    )
+
+    print(
+        "[Danbooru Games] "
+        "Запуск публикации"
+    )
+
+    print(
+        f"[Danbooru Games] "
+        f"Максимум попыток: "
+        f"{MAX_DISCORD_RETRIES}"
+    )
+
+    last_error = None
+
+    for attempt in range(
+        1,
+        MAX_DISCORD_RETRIES + 1,
+    ):
+        print(
+            "-------------------------------------------------------"
+        )
+
+        print(
+            "[Danbooru Games] "
+            f"Попытка {attempt}/"
+            f"{MAX_DISCORD_RETRIES}"
+        )
+
+        try:
+            # Получаем новый пост.
+            image = (
+                get_danbooru_games()
+            )
+
+            print(
+                "[Danbooru Games] "
+                f"Источник: "
+                f"{image.get('source')}"
+            )
+
+            print(
+                "[Danbooru Games] "
+                f"Тег: "
+                f"{image.get('tags')}"
+            )
+
+            print(
+                "[Danbooru Games] "
+                f"ID: "
+                f"{image.get('post_id')}"
+            )
+
+            # Пытаемся отправить.
+            send_to_discord(
+                image
+            )
+
+            print(
+                "[Danbooru Games] "
+                "Успешно опубликовано"
+            )
+
+            return {
+                "source": (
+                    "Danbooru Games"
+                ),
+                "success": True,
+                "error": None,
+            }
+
+        except RuntimeError as error:
+            last_error = error
+
+            error_text = str(error)
+
+            # =================================================
+            # DISCORD 20009
+            # =================================================
+
+            if error_text == "DISCORD_20009":
+                print(
+                    "[Danbooru Games] "
+                    "Discord отклонил пост "
+                    "кодом 20009."
+                )
+
+                print(
+                    "[Danbooru Games] "
+                    "Пост помечен как использованный."
+                )
+
+                print(
+                    "[Danbooru Games] "
+                    "Берём следующий пост..."
+                )
+
+                continue
+
+            # =================================================
+            # OTHER ERROR
+            # =================================================
+
+            print(
+                "[Danbooru Games] "
+                f"Ошибка: {error}"
+            )
+
+            break
+
+        except Exception as error:
+            last_error = error
+
+            print(
+                "[Danbooru Games] "
+                f"Неожиданная ошибка: "
+                f"{error}"
+            )
+
+            break
+
+    print(
+        "[Danbooru Games] "
+        "Не удалось опубликовать пост "
+        f"за {MAX_DISCORD_RETRIES} попыток."
+    )
+
+    return {
+        "source": "Danbooru Games",
+        "success": False,
+        "error": str(
+            last_error
+            or "Неизвестная ошибка"
+        ),
+    }
+
+
+# =========================================================
 # POST
 # =========================================================
 
@@ -1297,15 +1473,15 @@ def post_image():
         "======================================================="
     )
 
-    sources = []
+    results = []
 
     # =====================================================
     # WAIFU
     # =====================================================
 
     if WAIFU_WEBHOOK_URL:
-        sources.append(
-            (
+        results.append(
+            publish_source(
                 "Waifu.im",
                 get_random_waifu,
             )
@@ -1320,8 +1496,8 @@ def post_image():
         and DANBOORU_USERNAME
         and DANBOORU_API_KEY
     ):
-        sources.append(
-            (
+        results.append(
+            publish_source(
                 "Danbooru Anime",
                 get_danbooru_anime,
             )
@@ -1336,35 +1512,18 @@ def post_image():
         and DANBOORU_USERNAME
         and DANBOORU_API_KEY
     ):
-        sources.append(
-            (
-                "Danbooru Games",
-                get_danbooru_games,
-            )
+        results.append(
+            publish_danbooru_games()
         )
 
     # =====================================================
     # NO SOURCES
     # =====================================================
 
-    if not sources:
+    if not results:
         return Response(
             "No sources configured",
             status=500,
-        )
-
-    # =====================================================
-    # PUBLISH
-    # =====================================================
-
-    results = []
-
-    for name, getter in sources:
-        results.append(
-            publish_source(
-                name,
-                getter,
-            )
         )
 
     # =====================================================
