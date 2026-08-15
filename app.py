@@ -715,17 +715,14 @@ def send_to_discord(image):
             WAIFU_WEBHOOK_URL,
             "🌸 Anime",
         ),
-
         "Danbooru Anime": (
             DANBOORU_WEBHOOK_URL,
             "🎨 Anime Art",
         ),
-
         "Rule34 Games": (
             RULE34_GAMES_WEBHOOK_URL,
             "🎮 Game Art",
         ),
-
         "Pexels": (
             PEXELS_WEBHOOK_URL,
             "📷 Game Art",
@@ -748,13 +745,60 @@ def send_to_discord(image):
         download_image(image_url)
     )
 
-  response = requests.post(
-    webhook_url,
-    data={
-        "content": (
-            f"{message}\n"
-            f"Источник: {source}"
+    print(
+        f"[Discord] Отправка: {source}"
+    )
+
+    print(
+        f"[Discord] Файл: {filename}"
+    )
+
+    print(
+        f"[Discord] Размер: "
+        f"{len(image_data) / 1024 / 1024:.2f} MB"
+    )
+
+    response = requests.post(
+        webhook_url,
+        data={
+            "content": (
+                f"{message}\n"
+                f"Источник: {source}"
+            )
+        },
+        files={
+            "file": (
+                filename,
+                image_data,
+                content_type,
+            )
+        },
+        timeout=45,
+    )
+
+    print(
+        f"[Discord] HTTP: "
+        f"{response.status_code}"
+    )
+
+    if not response.ok:
+        print(
+            "[Discord] Ответ:",
+            response.text[:1000],
         )
+
+        raise RuntimeError(
+            f"Discord HTTP "
+            f"{response.status_code}: "
+            f"{response.text[:500]}"
+        )
+
+    print(
+        f"[Discord] Успешно отправлено: "
+        f"{source}"
+    )
+
+
     },
     files={
         "file": (
