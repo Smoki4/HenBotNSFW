@@ -350,6 +350,9 @@ DANBOORU_ANIME_TAGS = [
     "rating:explicit furry",
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
+    "rating:explicit boku_no_hero_academia",
+    "rating:explict raphtalia",
+     "rating:explict blue_archive,
 ]
 
 
