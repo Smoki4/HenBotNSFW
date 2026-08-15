@@ -1,4 +1,3 @@
-
 import os
 import random
 import threading
@@ -317,19 +316,84 @@ DANBOORU_ANIME_TAGS = [
     "rating:explicit furry",
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
-    "rating:explicit teto",
-    "rating:explicit neru",
 ]
 
 
 def get_danbooru_anime():
-    tags = random.choice(
-        DANBOORU_ANIME_TAGS
-    )
+    """
+    Ищет новый SAFE-пост.
 
-    return get_random_danbooru(
-        tags,
-        "Danbooru Anime",
+    Если один набор тегов пустой или весь уже использован,
+    автоматически пробует следующий.
+    """
+
+    tags_list = DANBOORU_ANIME_TAGS[:]
+
+    random.shuffle(tags_list)
+
+    last_error = None
+
+    for tags in tags_list:
+        try:
+            print(
+                "[Danbooru Anime] "
+                f"Пробуем: {tags}"
+            )
+
+            result = get_random_danbooru(
+                tags,
+                "Danbooru Anime",
+            )
+
+            if result:
+                print(
+                    "[Danbooru Anime] "
+                    "Новый пост найден"
+                )
+
+                return result
+
+        except Exception as error:
+            last_error = error
+
+            print(
+                "[Danbooru Anime] "
+                f"Запрос не подошёл: {error}"
+            )
+
+            continue
+
+    # Последний fallback — широкий SAFE-запрос.
+    try:
+        print(
+            "[Danbooru Anime] "
+            "Пробуем общий SAFE fallback"
+        )
+
+        result = get_random_danbooru(
+            "rating:explicit",
+            "Danbooru Anime",
+        )
+
+        if result:
+            return result
+
+    except Exception as error:
+        last_error = error
+
+        print(
+            "[Danbooru Anime] "
+            f"Fallback ошибка: {error}"
+        )
+
+    raise RuntimeError(
+        "Danbooru Anime: "
+        "не удалось найти новый SAFE пост"
+        + (
+            f": {last_error}"
+            if last_error
+            else ""
+        )
     )
 
 
@@ -374,23 +438,80 @@ DANBOORU_GAME_TAGS = [
 
 
 def get_danbooru_games():
-    print(
-        "[Danbooru Games] "
-        "Ищем игровой SAFE арт..."
-    )
+    """
+    Ищет новый SAFE игровой пост.
 
-    tags = random.choice(
-        DANBOORU_GAME_TAGS
-    )
+    Если один набор тегов пустой или весь уже использован,
+    автоматически пробует следующий.
+    """
 
-    print(
-        "[Danbooru Games] "
-        f"Выбран запрос: {tags}"
-    )
+    tags_list = DANBOORU_GAME_TAGS[:]
 
-    return get_random_danbooru(
-        tags,
-        "Danbooru Games",
+    random.shuffle(tags_list)
+
+    last_error = None
+
+    for tags in tags_list:
+        try:
+            print(
+                "[Danbooru Games] "
+                f"Пробуем: {tags}"
+            )
+
+            result = get_random_danbooru(
+                tags,
+                "Danbooru Games",
+            )
+
+            if result:
+                print(
+                    "[Danbooru Games] "
+                    "Новый игровой пост найден"
+                )
+
+                return result
+
+        except Exception as error:
+            last_error = error
+
+            print(
+                "[Danbooru Games] "
+                f"Запрос не подошёл: {error}"
+            )
+
+            continue
+
+    # Последний fallback — широкий SAFE-запрос.
+    try:
+        print(
+            "[Danbooru Games] "
+            "Пробуем общий SAFE fallback"
+        )
+
+        result = get_random_danbooru(
+            "rating:explicit",
+            "Danbooru Games",
+        )
+
+        if result:
+            return result
+
+    except Exception as error:
+        last_error = error
+
+        print(
+            "[Danbooru Games] "
+            f"Fallback ошибка: {error}"
+        )
+
+    raise RuntimeError(
+        "Danbooru Games: "
+        "не удалось найти новый SAFE пост"
+        + (
+            f": {last_error}"
+            if last_error
+            else ""
+        )
     )
 
 
