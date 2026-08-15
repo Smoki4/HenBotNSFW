@@ -346,18 +346,190 @@ def get_random_danbooru(
 # =========================================================
 
 DANBOORU_ANIME_TAGS = [
+    # =========================================================
+    # ОСНОВНЫЕ
+    # =========================================================
+
     "rating:explicit anime",
     "rating:explicit 1girl",
+    "rating:explicit 2girls",
     "rating:explicit 1boy",
+    "rating:explicit 2boys",
     "rating:explicit solo",
-    "rating:explicit scenery",
-    "rating:explicit landscape",
-    "rating:explicit fantasy",
+    "rating:explicit portrait",
+    "rating:explicit upper_body",
+    "rating:explicit full_body",
+
+    # =========================================================
+    # ВОЛОСЫ
+    # =========================================================
+
+    "rating:explicit long_hair",
+    "rating:explicit short_hair",
+    "rating:explicit very_long_hair",
+    "rating:explicit twintails",
+    "rating:explicit ponytail",
+    "rating:explicit braid",
+    "rating:explicit hair_bow",
+    "rating:explicit black_hair",
+    "rating:explicit blonde_hair",
+    "rating:explicit white_hair",
+    "rating:explicit silver_hair",
+    "rating:explicit gray_hair",
+    "rating:explicit pink_hair",
+    "rating:explicit blue_hair",
+    "rating:explicit red_hair",
+    "rating:explicit purple_hair",
+    "rating:explicit green_hair",
+    "rating:explicit brown_hair",
+    "rating:explicit orange_hair",
+
+    # =========================================================
+    # ГЛАЗА
+    # =========================================================
+
+    "rating:explicit blue_eyes",
+    "rating:explicit red_eyes",
+    "rating:explicit green_eyes",
+    "rating:explicit yellow_eyes",
+    "rating:explicit purple_eyes",
+    "rating:explicit brown_eyes",
+    "rating:explicit heterochromia",
+
+    # =========================================================
+    # ОДЕЖДА
+    # =========================================================
+
     "rating:explicit school_uniform",
+    "rating:explicit sailor_uniform",
+    "rating:explicit blazer",
+    "rating:explicit hoodie",
+    "rating:explicit sweater",
+    "rating:explicit jacket",
+    "rating:explicit coat",
+    "rating:explicit kimono",
+    "rating:explicit yukata",
+    "rating:explicit maid",
+    "rating:explicit miko",
+    "rating:explicit armor",
+    "rating:explicit dress",
+    "rating:explicit wedding_dress",
+    "rating:explicit formal",
+    "rating:explicit casual",
+
+    # =========================================================
+    # ФЭНТЕЗИ
+    # =========================================================
+
+    "rating:explicit fantasy",
+    "rating:explicit elf",
+    "rating:explicit witch",
+    "rating:explicit magical_girl",
+    "rating:explicit angel",
+    "rating:explicit demon_girl",
+    "rating:explicit cat_ears",
+    "rating:explicit fox_ears",
+    "rating:explicit bunny_ears",
     "rating:explicit animal_ears",
     "rating:explicit furry",
+    "rating:explicit wings",
+    "rating:explicit horns",
+    "rating:explicit tail",
+
+    # =========================================================
+    # СЦЕНЫ И ПЕЙЗАЖИ
+    # =========================================================
+
+    "rating:explicit scenery",
+    "rating:explicit landscape",
+    "rating:explicit beach",
+    "rating:explicit ocean",
+    "rating:explicit sea",
+    "rating:explicit sunset",
+    "rating:explicit sunrise",
+    "rating:explicit night",
+    "rating:explicit starry_sky",
+    "rating:explicit sky",
+    "rating:explicit forest",
+    "rating:explicit mountain",
+    "rating:explicit city",
+    "rating:explicit cityscape",
+    "rating:explicit flowers",
+    "rating:explicit cherry_blossoms",
+    "rating:explicit rain",
+    "rating:explicit snow",
+    "rating:explicit winter",
+    "rating:explicit autumn",
+    "rating:explicit spring",
+    "rating:explicit summer",
+
+    # =========================================================
+    # АНИМЕ / МЕДИА
+    # =========================================================
+
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
+    "rating:explicit hololive",
+    "rating:explicit nijisanji",
+    "rating:explicit touhou",
+
+    # =========================================================
+    # ПОПУЛЯРНЫЕ АНИМЕ
+    # =========================================================
+
+    "rating:explicit neon_genesis_evangelion",
+    "rating:explicit sailor_moon",
+    "rating:explicit pokemon",
+    "rating:explicit naruto",
+    "rating:explicit one_piece",
+    "rating:explicit bleach",
+    "rating:explicit dragon_ball",
+    "rating:explicit my_hero_academia",
+    "rating:explicit jujutsu_kaisen",
+    "rating:explicit demon_slayer",
+    "rating:explicit chainsaw_man",
+    "rating:explicit spy_x_family",
+    "rating:explicit frieren",
+    "rating:explicit re_zero",
+    "rating:explicit konosuba",
+    "rating:explicit fate_series",
+    "rating:explicit bocchi_the_rock",
+
+    # =========================================================
+    # ИГРОВЫЕ АНИМЕ-ФРАНШИЗЫ
+    # =========================================================
+
+    "rating:explicit genshin_impact",
+    "rating:explicit honkai:_star_rail",
+    "rating:explicit honkai_impact_3rd",
+    "rating:explicit zenless_zone_zero",
+    "rating:explicit wuthering_waves",
+    "rating:explicit blue_archive",
+    "rating:explicit arknights",
+    "rating:explicit azur_lane",
+    "rating:explicit girls_frontline",
+    "rating:explicit project_sekai",
+    "rating:explicit granblue_fantasy",
+    "rating:explicit fate_grand_order",
+
+    # =========================================================
+    # ДОПОЛНИТЕЛЬНЫЕ КАТЕГОРИИ
+    # =========================================================
+
+    "rating:explicit school",
+    "rating:explicit classroom",
+    "rating:explicit library",
+    "rating:explicit bedroom",
+    "rating:explicit cafe",
+    "rating:explicit restaurant",
+    "rating:explicit train",
+    "rating:explicit street",
+    "rating:explicit park",
+    "rating:explicit festival",
+    "rating:explicit fireworks",
+    "rating:explicit moon",
+    "rating:explicit stars",
+    "rating:explicit clouds",
 ]
 
 
