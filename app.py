@@ -1,4 +1,3 @@
-
 import os
 import random
 import threading
@@ -317,30 +316,84 @@ DANBOORU_ANIME_TAGS = [
     "rating:explicit furry",
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
-    "rating:explicit teto",
-    "rating:explicit neru",
-    "rating:explicit bleach",
-    "rating:explicit yani_neko",
-    "rating:explicit umamusume",
-    "rating:explicit goldship",
-    "rating:explicit jojo",
-    "rating:explicit chaisawman",
-    "rating:explicit power",
-    "rating:explicit reze",
-    "rating:explicit makima",
-    "rating:explicit kobeni",
-    "rating:explicit fami",
 ]
 
 
 def get_danbooru_anime():
-    tags = random.choice(
-        DANBOORU_ANIME_TAGS
-    )
+    """
+    Ищет новый SAFE-пост.
 
-    return get_random_danbooru(
-        tags,
-        "Danbooru Anime",
+    Если один набор тегов пустой или весь уже использован,
+    автоматически пробует следующий.
+    """
+
+    tags_list = DANBOORU_ANIME_TAGS[:]
+
+    random.shuffle(tags_list)
+
+    last_error = None
+
+    for tags in tags_list:
+        try:
+            print(
+                "[Danbooru Anime] "
+                f"Пробуем: {tags}"
+            )
+
+            result = get_random_danbooru(
+                tags,
+                "Danbooru Anime",
+            )
+
+            if result:
+                print(
+                    "[Danbooru Anime] "
+                    "Новый пост найден"
+                )
+
+                return result
+
+        except Exception as error:
+            last_error = error
+
+            print(
+                "[Danbooru Anime] "
+                f"Запрос не подошёл: {error}"
+            )
+
+            continue
+
+    # Последний fallback — широкий SAFE-запрос.
+    try:
+        print(
+            "[Danbooru Anime] "
+            "Пробуем общий SAFE fallback"
+        )
+
+        result = get_random_danbooru(
+            "rating:explicit",
+            "Danbooru Anime",
+        )
+
+        if result:
+            return result
+
+    except Exception as error:
+        last_error = error
+
+        print(
+            "[Danbooru Anime] "
+            f"Fallback ошибка: {error}"
+        )
+
+    raise RuntimeError(
+        "Danbooru Anime: "
+        "не удалось найти новый SAFE пост"
+        + (
+            f": {last_error}"
+            if last_error
+            else ""
+        )
     )
 
 
