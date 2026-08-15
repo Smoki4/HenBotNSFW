@@ -1,4 +1,4 @@
-```python
+
 import os
 import random
 import threading
@@ -305,24 +305,24 @@ def get_random_danbooru(
 # =========================================================
 
 DANBOORU_ANIME_TAGS = [
-    "rating:safe anime",
-    "rating:safe 1girl",
-    "rating:safe 1boy",
-    "rating:safe solo",
-    "rating:safe scenery",
-    "rating:safe landscape",
-    "rating:safe fantasy",
-    "rating:safe school_uniform",
-    "rating:safe animal_ears",
-    "rating:safe furry",
-    "rating:safe vocaloid",
-    "rating:safe hatsune_miku",
+    "rating:explicit anime",
+    "rating:explicit 1girl",
+    "rating:explicit 1boy",
+    "rating:explicit solo",
+    "rating:explicit scenery",
+    "rating:explicit landscape",
+    "rating:explicit fantasy",
+    "rating:explicit school_uniform",
+    "rating:explicit animal_ears",
+    "rating:explicit furry",
+    "rating:explicit vocaloid",
+    "rating:explicit hatsune_miku",
 ]
 
 
 def get_danbooru_anime():
     """
-    Ищет новый SAFE-пост.
+    Ищет новый explicit-пост.
 
     Если один набор тегов пустой или весь уже использован,
     автоматически пробует следующий.
@@ -364,15 +364,15 @@ def get_danbooru_anime():
 
             continue
 
-    # Последний fallback — широкий SAFE-запрос.
+    # Последний fallback — широкий explicit-запрос.
     try:
         print(
             "[Danbooru Anime] "
-            "Пробуем общий SAFE fallback"
+            "Пробуем общий explicit fallback"
         )
 
         result = get_random_danbooru(
-            "rating:safe",
+            "rating:explicit",
             "Danbooru Anime",
         )
 
@@ -389,7 +389,7 @@ def get_danbooru_anime():
 
     raise RuntimeError(
         "Danbooru Anime: "
-        "не удалось найти новый SAFE пост"
+        "не удалось найти новый explicit пост"
         + (
             f": {last_error}"
             if last_error
@@ -403,44 +403,44 @@ def get_danbooru_anime():
 # =========================================================
 
 DANBOORU_GAME_TAGS = [
-    "rating:safe genshin_impact",
-    "rating:safe honkai:_star_rail",
-    "rating:safe zenless_zone_zero",
-    "rating:safe league_of_legends",
-    "rating:safe overwatch",
-    "rating:safe valorant",
-    "rating:safe apex_legends",
-    "rating:safe fortnite",
-    "rating:safe minecraft",
-    "rating:safe pokemon",
-    "rating:safe final_fantasy",
-    "rating:safe resident_evil",
-    "rating:safe nier_automata",
-    "rating:safe cyberpunk_2077",
-    "rating:safe the_witcher",
-    "rating:safe baldurs_gate_3",
-    "rating:safe elden_ring",
-    "rating:safe dark_souls",
-    "rating:safe devil_may_cry",
-    "rating:safe guilty_gear",
-    "rating:safe street_fighter",
-    "rating:safe mortal_kombat",
-    "rating:safe tekken",
-    "rating:safe persona",
-    "rating:safe dota_2",
-    "rating:safe dead_by_daylight",
-    "rating:safe risk_of_rain_2",
-    "rating:safe fnaf",
-    "rating:safe portal",
-    "rating:safe halo",
-    "rating:safe fallout",
-    "rating:safe furry game_character",
+    "rating:explicit genshin_impact",
+    "rating:explicit honkai:_star_rail",
+    "rating:explicit zenless_zone_zero",
+    "rating:explicit league_of_legends",
+    "rating:explicit overwatch",
+    "rating:explicit valorant",
+    "rating:explicit apex_legends",
+    "rating:explicit fortnite",
+    "rating:explicit minecraft",
+    "rating:explicit pokemon",
+    "rating:explicit final_fantasy",
+    "rating:explicit resident_evil",
+    "rating:explicit nier_automata",
+    "rating:explicit cyberpunk_2077",
+    "rating:explicit the_witcher",
+    "rating:explicit baldurs_gate_3",
+    "rating:explicit elden_ring",
+    "rating:explicit dark_souls",
+    "rating:explicit devil_may_cry",
+    "rating:explicit guilty_gear",
+    "rating:explicit street_fighter",
+    "rating:explicit mortal_kombat",
+    "rating:explicit tekken",
+    "rating:explicit persona",
+    "rating:explicit dota_2",
+    "rating:explicit dead_by_daylight",
+    "rating:explicit risk_of_rain_2",
+    "rating:explicit fnaf",
+    "rating:explicit portal",
+    "rating:explicit halo",
+    "rating:explicit fallout",
+    "rating:explicit furry game_character",
 ]
 
 
 def get_danbooru_games():
     """
-    Ищет новый SAFE игровой пост.
+    Ищет новый explicit игровой пост.
 
     Если один набор тегов пустой или весь уже использован,
     автоматически пробует следующий.
@@ -482,15 +482,15 @@ def get_danbooru_games():
 
             continue
 
-    # Последний fallback — широкий SAFE-запрос.
+    # Последний fallback — широкий explicit-запрос.
     try:
         print(
             "[Danbooru Games] "
-            "Пробуем общий SAFE fallback"
+            "Пробуем общий explicit fallback"
         )
 
         result = get_random_danbooru(
-            "rating:safe",
+            "rating:explicit",
             "Danbooru Games",
         )
 
@@ -507,7 +507,7 @@ def get_danbooru_games():
 
     raise RuntimeError(
         "Danbooru Games: "
-        "не удалось найти новый SAFE пост"
+        "не удалось найти новый explicit пост"
         + (
             f": {last_error}"
             if last_error
@@ -1236,4 +1236,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
-```
