@@ -1,4 +1,4 @@
-
+```python
 import os
 import random
 import threading
@@ -305,18 +305,18 @@ def get_random_danbooru(
 # =========================================================
 
 DANBOORU_ANIME_TAGS = [
-    "rating:explicit anime",
-    "rating:explicit 1girl",
-    "rating:explicit 1boy",
-    "rating:explicit solo",
-    "rating:explicit scenery",
-    "rating:explicit landscape",
-    "rating:explicit fantasy",
-    "rating:explicit school_uniform",
-    "rating:explicit animal_ears",
-    "rating:explicit furry",
-    "rating:explicit vocaloid",
-    "rating:explicit hatsune_miku",
+    "rating:safe anime",
+    "rating:safe 1girl",
+    "rating:safe 1boy",
+    "rating:safe solo",
+    "rating:safe scenery",
+    "rating:safe landscape",
+    "rating:safe fantasy",
+    "rating:safe school_uniform",
+    "rating:safe animal_ears",
+    "rating:safe furry",
+    "rating:safe vocaloid",
+    "rating:safe hatsune_miku",
 ]
 
 
@@ -372,7 +372,7 @@ def get_danbooru_anime():
         )
 
         result = get_random_danbooru(
-            "rating:explicit",
+            "rating:safe",
             "Danbooru Anime",
         )
 
@@ -403,38 +403,38 @@ def get_danbooru_anime():
 # =========================================================
 
 DANBOORU_GAME_TAGS = [
-    "rating:explicit genshin_impact",
-    "rating:explicit honkai:_star_rail",
-    "rating:explicit zenless_zone_zero",
-    "rating:explicit league_of_legends",
-    "rating:explicit overwatch",
-    "rating:explicit valorant",
-    "rating:explicit apex_legends",
-    "rating:explicit fortnite",
-    "rating:explicit minecraft",
-    "rating:explicit pokemon",
-    "rating:explicit final_fantasy",
-    "rating:explicit resident_evil",
-    "rating:explicit nier_automata",
-    "rating:explicit cyberpunk_2077",
-    "rating:explicit the_witcher",
-    "rating:explicit baldurs_gate_3",
-    "rating:explicit elden_ring",
-    "rating:explicit dark_souls",
-    "rating:explicit devil_may_cry",
-    "rating:explicit guilty_gear",
-    "rating:explicit street_fighter",
-    "rating:explicit mortal_kombat",
-    "rating:explicit tekken",
-    "rating:explicit persona",
-    "rating:explicit dota_2",
-    "rating:explicit dead_by_daylight",
-    "rating:explicit risk_of_rain_2",
-    "rating:explicit fnaf",
-    "rating:explicit portal",
-    "rating:explicit halo",
-    "rating:explicit fallout",
-    "rating:explicit furry game_character",
+    "rating:safe genshin_impact",
+    "rating:safe honkai:_star_rail",
+    "rating:safe zenless_zone_zero",
+    "rating:safe league_of_legends",
+    "rating:safe overwatch",
+    "rating:safe valorant",
+    "rating:safe apex_legends",
+    "rating:safe fortnite",
+    "rating:safe minecraft",
+    "rating:safe pokemon",
+    "rating:safe final_fantasy",
+    "rating:safe resident_evil",
+    "rating:safe nier_automata",
+    "rating:safe cyberpunk_2077",
+    "rating:safe the_witcher",
+    "rating:safe baldurs_gate_3",
+    "rating:safe elden_ring",
+    "rating:safe dark_souls",
+    "rating:safe devil_may_cry",
+    "rating:safe guilty_gear",
+    "rating:safe street_fighter",
+    "rating:safe mortal_kombat",
+    "rating:safe tekken",
+    "rating:safe persona",
+    "rating:safe dota_2",
+    "rating:safe dead_by_daylight",
+    "rating:safe risk_of_rain_2",
+    "rating:safe fnaf",
+    "rating:safe portal",
+    "rating:safe halo",
+    "rating:safe fallout",
+    "rating:safe furry game_character",
 ]
 
 
@@ -490,7 +490,7 @@ def get_danbooru_games():
         )
 
         result = get_random_danbooru(
-            "rating:explicit",
+            "rating:safe",
             "Danbooru Games",
         )
 
@@ -544,8 +544,9 @@ def download_image(image_url):
         "Content-Length"
     )
 
-    # Если сервер сразу сообщил размер,
-    # просто предупреждаем в логах.
+    # Сервер сообщил размер файла.
+    # Не блокируем загрузку, даже если файл больше 8 MB,
+    # потому что его нужно попробовать сжать.
     if content_length:
         try:
             size_mb = (
@@ -586,8 +587,13 @@ def download_image(image_url):
         f"{len(original_data) / 1024 / 1024:.2f} MB"
     )
 
-    # Если исходный файл уже подходит,
-    # отправляем его без изменений.
+    # =====================================================
+    # FILE ALREADY SMALL ENOUGH
+    # =====================================================
+
+    # ВАЖНО:
+    # Если GIF уже <= 8 MB, отправляем его оригинальным.
+    # Анимация полностью сохраняется.
     if len(original_data) <= max_size:
         content_type_lower = (
             content_type.lower()
@@ -595,16 +601,33 @@ def download_image(image_url):
 
         if "png" in content_type_lower:
             extension = "png"
+
         elif "webp" in content_type_lower:
             extension = "webp"
+
         elif "gif" in content_type_lower:
             extension = "gif"
-        elif "jpeg" in content_type_lower:
+
+        elif (
+            "jpeg" in content_type_lower
+            or "jpg" in content_type_lower
+        ):
             extension = "jpg"
+
         else:
             extension = "jpg"
 
         filename = f"image.{extension}"
+
+        print(
+            "[Download] "
+            "Файл меньше 8 MB."
+        )
+
+        print(
+            "[Download] "
+            "Отправляем оригинал без изменений."
+        )
 
         return (
             filename,
@@ -617,11 +640,13 @@ def download_image(image_url):
     # =====================================================
 
     print(
-        "[Download] Изображение больше 8 MB."
+        "[Download] "
+        "Изображение больше 8 MB."
     )
 
     print(
-        "[Download] Начинаем автоматическое сжатие..."
+        "[Download] "
+        "Начинаем автоматическое сжатие..."
     )
 
     try:
@@ -639,16 +664,40 @@ def download_image(image_url):
             f"{image.width}x{image.height}"
         )
 
-        # Анимацию не обрабатываем как обычную картинку.
+        # =================================================
+        # ANIMATION
+        # =================================================
+
+        # Если GIF/APNG анимированный и больше 8 MB,
+        # берём первый кадр.
+        #
+        # Если GIF <= 8 MB, до этого места код вообще
+        # не дойдёт, поэтому его анимация сохраняется.
         if getattr(
             image,
             "is_animated",
             False,
         ):
-            raise RuntimeError(
-                "Анимированное изображение "
-                "больше 8 MB"
+            print(
+                "[Download] "
+                "Обнаружена анимация."
             )
+
+            print(
+                "[Download] "
+                "Файл больше 8 MB."
+            )
+
+            print(
+                "[Download] "
+                "Используем первый кадр."
+            )
+
+            image.seek(0)
+
+        # =================================================
+        # PREPARE IMAGE FOR JPEG
+        # =================================================
 
         # Для JPEG нужен RGB.
         if image.mode in (
@@ -673,7 +722,8 @@ def download_image(image_url):
             ):
                 background.paste(
                     image,
-                    mask=image.getchannel(
+                    (0, 0),
+                    image.getchannel(
                         "A"
                     ),
                 )
@@ -691,7 +741,7 @@ def download_image(image_url):
             )
 
         # =================================================
-        # ПЕРВЫЙ ЭТАП — JPEG QUALITY
+        # FIRST STAGE — JPEG QUALITY
         # =================================================
 
         qualities = [
@@ -722,16 +772,22 @@ def download_image(image_url):
                 output.getvalue()
             )
 
+            size_mb = (
+                len(compressed_data)
+                / 1024
+                / 1024
+            )
+
             print(
                 "[Download] JPEG quality "
                 f"{quality}: "
-                f"{len(compressed_data) / 1024 / 1024:.2f} MB"
+                f"{size_mb:.2f} MB"
             )
 
             if len(compressed_data) <= max_size:
                 print(
                     "[Download] "
-                    "Сжатие успешно"
+                    "Сжатие успешно."
                 )
 
                 return (
@@ -741,7 +797,7 @@ def download_image(image_url):
                 )
 
         # =================================================
-        # ВТОРОЙ ЭТАП — УМЕНЬШАЕМ РАЗРЕШЕНИЕ
+        # SECOND STAGE — RESIZE
         # =================================================
 
         print(
@@ -810,11 +866,17 @@ def download_image(image_url):
                     output.getvalue()
                 )
 
+                size_mb = (
+                    len(compressed_data)
+                    / 1024
+                    / 1024
+                )
+
                 print(
                     "[Download] "
                     f"{new_width}x{new_height}, "
                     f"quality {quality}: "
-                    f"{len(compressed_data) / 1024 / 1024:.2f} MB"
+                    f"{size_mb:.2f} MB"
                 )
 
                 if (
@@ -824,7 +886,7 @@ def download_image(image_url):
                     print(
                         "[Download] "
                         "Изображение "
-                        "успешно сжато"
+                        "успешно сжато."
                     )
 
                     return (
@@ -1174,3 +1236,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
+```
