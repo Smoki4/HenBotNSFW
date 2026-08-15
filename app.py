@@ -748,25 +748,38 @@ def send_to_discord(image):
         download_image(image_url)
     )
 
-    response = requests.post(
-        webhook_url,
-        data={
-            "content": (
-                f"{message}\n"
-                f"Источник: {source}"
-            )
-        },
-        files={
-            "file": (
-                filename,
-                image_data,
-                content_type,
-            )
-        },
-        timeout=45,
+  response = requests.post(
+    webhook_url,
+    data={
+        "content": (
+            f"{message}\n"
+            f"Источник: {source}"
+        )
+    },
+    files={
+        "file": (
+            filename,
+            image_data,
+            content_type,
+        )
+    },
+    timeout=45,
+)
+
+print(
+    f"[Discord] HTTP: {response.status_code}"
+)
+
+if not response.ok:
+    print(
+        "[Discord] Ответ:",
+        response.text[:1000]
     )
 
-    response.raise_for_status()
+    raise RuntimeError(
+        f"Discord HTTP {response.status_code}: "
+        f"{response.text[:500]}"
+    )
 
 
 # =========================================================
