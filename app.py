@@ -1,4 +1,3 @@
-
 import os
 import random
 import threading
@@ -22,8 +21,8 @@ DANBOORU_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_DANBOORU"
 )
 
-# Сохраняем старую переменную webhook Rule34 Games,
-# но теперь она используется для Danbooru Games.
+# Старая переменная Rule34 Games сохраняется.
+# Теперь она используется для Danbooru Games.
 DANBOORU_GAMES_WEBHOOK_URL = (
     os.environ.get("DISCORD_WEBHOOK_RULE34_GAMES")
     or os.environ.get("DISCORD_WEBHOOK_DANBOORU_GAMES")
@@ -42,7 +41,9 @@ DANBOORU_API_KEY = os.environ.get(
 # API
 # =========================================================
 
-DANBOORU_API = "https://danbooru.donmai.us"
+DANBOORU_API = (
+    "https://danbooru.donmai.us"
+)
 
 
 # =========================================================
@@ -70,7 +71,10 @@ DANBOORU_HEADERS = {
 # =========================================================
 
 DANBOORU_USED_IDS = set()
-DANBOORU_MEMORY_LOCK = threading.Lock()
+
+DANBOORU_MEMORY_LOCK = (
+    threading.Lock()
+)
 
 MAX_MEMORY = 1000
 
@@ -113,6 +117,7 @@ def was_used(
 # =========================================================
 
 DANBOORU_LOCK = threading.Lock()
+
 LAST_DANBOORU_REQUEST = 0.0
 
 
@@ -123,10 +128,14 @@ def danbooru_wait():
         now = time.monotonic()
 
         elapsed = (
-            now - LAST_DANBOORU_REQUEST
+            now
+            - LAST_DANBOORU_REQUEST
         )
 
-        wait_time = 1.2 - elapsed
+        wait_time = (
+            1.2
+            - elapsed
+        )
 
         if wait_time > 0:
             time.sleep(wait_time)
@@ -350,21 +359,21 @@ DANBOORU_ANIME_TAGS = [
     "rating:explicit furry",
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
-    "rating:explicit boku_no_hero_academia",
-    "rating:explict raphtalia",
-     "rating:explict blue_archive",
 ]
 
 
 def get_danbooru_anime():
     """
-    Ищет новый explicit-пост.
+    Ищет новый SAFE-пост.
 
-    Если один набор тегов пустой или весь уже использован,
-    автоматически пробует следующий.
+    Если один набор тегов пустой
+    или уже использован,
+    пробует следующий.
     """
 
-    tags_list = DANBOORU_ANIME_TAGS[:]
+    tags_list = (
+        DANBOORU_ANIME_TAGS[:]
+    )
 
     random.shuffle(tags_list)
 
@@ -377,9 +386,11 @@ def get_danbooru_anime():
                 f"Пробуем тег: {tags}"
             )
 
-            result = get_random_danbooru(
-                tags,
-                "Danbooru Anime",
+            result = (
+                get_random_danbooru(
+                    tags,
+                    "Danbooru Anime",
+                )
             )
 
             if result:
@@ -390,12 +401,14 @@ def get_danbooru_anime():
 
                 print(
                     "[Danbooru Anime] "
-                    f"Тег: {result.get('tags')}"
+                    f"Тег: "
+                    f"{result.get('tags')}"
                 )
 
                 print(
                     "[Danbooru Anime] "
-                    f"ID: {result.get('post_id')}"
+                    f"ID: "
+                    f"{result.get('post_id')}"
                 )
 
                 return result
@@ -405,21 +418,27 @@ def get_danbooru_anime():
 
             print(
                 "[Danbooru Anime] "
-                f"Запрос не подошёл: {error}"
+                f"Запрос не подошёл: "
+                f"{error}"
             )
 
             continue
 
-    # Последний fallback — широкий explicit-запрос.
+    # =====================================================
+    # SAFE FALLBACK
+    # =====================================================
+
     try:
         print(
             "[Danbooru Anime] "
-            "Пробуем общий explicit fallback"
+            "Пробуем общий SAFE fallback"
         )
 
-        result = get_random_danbooru(
-            "rating:explicit",
-            "Danbooru Anime",
+        result = (
+            get_random_danbooru(
+                "rating:explicit",
+                "Danbooru Anime",
+            )
         )
 
         if result:
@@ -430,12 +449,13 @@ def get_danbooru_anime():
 
         print(
             "[Danbooru Anime] "
-            f"Fallback ошибка: {error}"
+            f"Fallback ошибка: "
+            f"{error}"
         )
 
     raise RuntimeError(
         "Danbooru Anime: "
-        "не удалось найти новый explicit пост"
+        "не удалось найти новый SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -486,13 +506,16 @@ DANBOORU_GAME_TAGS = [
 
 def get_danbooru_games():
     """
-    Ищет новый explicit игровой пост.
+    Ищет новый SAFE игровой пост.
 
-    Если один набор тегов пустой или весь уже использован,
-    автоматически пробует следующий.
+    Если один набор тегов пустой
+    или уже использован,
+    пробует следующий.
     """
 
-    tags_list = DANBOORU_GAME_TAGS[:]
+    tags_list = (
+        DANBOORU_GAME_TAGS[:]
+    )
 
     random.shuffle(tags_list)
 
@@ -505,9 +528,11 @@ def get_danbooru_games():
                 f"Пробуем тег: {tags}"
             )
 
-            result = get_random_danbooru(
-                tags,
-                "Danbooru Games",
+            result = (
+                get_random_danbooru(
+                    tags,
+                    "Danbooru Games",
+                )
             )
 
             if result:
@@ -518,12 +543,14 @@ def get_danbooru_games():
 
                 print(
                     "[Danbooru Games] "
-                    f"Тег: {result.get('tags')}"
+                    f"Тег: "
+                    f"{result.get('tags')}"
                 )
 
                 print(
                     "[Danbooru Games] "
-                    f"ID: {result.get('post_id')}"
+                    f"ID: "
+                    f"{result.get('post_id')}"
                 )
 
                 return result
@@ -533,21 +560,27 @@ def get_danbooru_games():
 
             print(
                 "[Danbooru Games] "
-                f"Запрос не подошёл: {error}"
+                f"Запрос не подошёл: "
+                f"{error}"
             )
 
             continue
 
-    # Последний fallback — широкий explicit-запрос.
+    # =====================================================
+    # SAFE FALLBACK
+    # =====================================================
+
     try:
         print(
             "[Danbooru Games] "
-            "Пробуем общий explicit fallback"
+            "Пробуем общий SAFE fallback"
         )
 
-        result = get_random_danbooru(
-            "rating:explicit",
-            "Danbooru Games",
+        result = (
+            get_random_danbooru(
+                "rating:explicit",
+                "Danbooru Games",
+            )
         )
 
         if result:
@@ -558,12 +591,13 @@ def get_danbooru_games():
 
         print(
             "[Danbooru Games] "
-            f"Fallback ошибка: {error}"
+            f"Fallback ошибка: "
+            f"{error}"
         )
 
     raise RuntimeError(
         "Danbooru Games: "
-        "не удалось найти новый explicit пост"
+        "не удалось найти новый SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -580,7 +614,9 @@ def download_image(image_url):
     from io import BytesIO
     from PIL import Image
 
-    max_size = 8 * 1024 * 1024
+    max_size = (
+        8 * 1024 * 1024
+    )
 
     response = requests.get(
         image_url,
@@ -591,13 +627,17 @@ def download_image(image_url):
 
     response.raise_for_status()
 
-    content_type = response.headers.get(
-        "Content-Type",
-        "image/jpeg",
+    content_type = (
+        response.headers.get(
+            "Content-Type",
+            "image/jpeg",
+        )
     )
 
-    content_length = response.headers.get(
-        "Content-Length"
+    content_length = (
+        response.headers.get(
+            "Content-Length"
+        )
     )
 
     if content_length:
@@ -609,7 +649,8 @@ def download_image(image_url):
             )
 
             print(
-                "[Download] Размер исходника: "
+                "[Download] "
+                "Размер исходника: "
                 f"{size_mb:.2f} MB"
             )
 
@@ -617,6 +658,7 @@ def download_image(image_url):
             pass
 
     chunks = []
+
     total = 0
 
     try:
@@ -633,7 +675,9 @@ def download_image(image_url):
     finally:
         response.close()
 
-    original_data = b"".join(chunks)
+    original_data = (
+        b"".join(chunks)
+    )
 
     print(
         "[Download] Получено: "
@@ -641,12 +685,9 @@ def download_image(image_url):
     )
 
     # =====================================================
-    # FILE <= 8 MB
+    # ORIGINAL <= 8 MB
     # =====================================================
 
-    # ВАЖНО:
-    # Если GIF <= 8 MB, он отправляется без изменений.
-    # Анимация полностью сохраняется.
     if len(original_data) <= max_size:
         content_type_lower = (
             content_type.lower()
@@ -670,17 +711,25 @@ def download_image(image_url):
         else:
             extension = "jpg"
 
-        filename = f"image.{extension}"
-
-        print(
-            "[Download] "
-            "Файл меньше или равен 8 MB."
+        filename = (
+            f"image.{extension}"
         )
 
         print(
             "[Download] "
-            "Отправляем оригинал без изменений."
+            "Файл <= 8 MB."
         )
+
+        print(
+            "[Download] "
+            "Отправляем оригинал."
+        )
+
+        if extension == "gif":
+            print(
+                "[Download] "
+                "GIF сохраняет анимацию."
+            )
 
         return (
             filename,
@@ -689,7 +738,7 @@ def download_image(image_url):
         )
 
     # =====================================================
-    # IMAGE TOO LARGE
+    # IMAGE > 8 MB
     # =====================================================
 
     print(
@@ -699,7 +748,8 @@ def download_image(image_url):
 
     print(
         "[Download] "
-        "Начинаем автоматическое сжатие..."
+        "Начинаем автоматическое "
+        "сжатие..."
     )
 
     try:
@@ -721,10 +771,6 @@ def download_image(image_url):
         # ANIMATION
         # =================================================
 
-        # GIF/APNG больше 8 MB:
-        # используем первый кадр.
-        #
-        # GIF <= 8 MB сюда вообще не попадёт.
         if getattr(
             image,
             "is_animated",
@@ -737,18 +783,19 @@ def download_image(image_url):
 
             print(
                 "[Download] "
-                "Файл больше 8 MB."
+                "GIF/анимация больше 8 MB."
             )
 
             print(
                 "[Download] "
-                "Используем первый кадр."
+                "Используем первый кадр "
+                "для JPEG-сжатия."
             )
 
             image.seek(0)
 
         # =================================================
-        # PREPARE FOR JPEG
+        # CONVERT TO RGB
         # =================================================
 
         if image.mode in (
@@ -792,7 +839,7 @@ def download_image(image_url):
             )
 
         # =================================================
-        # FIRST STAGE — JPEG QUALITY
+        # JPEG QUALITY
         # =================================================
 
         qualities = [
@@ -830,12 +877,15 @@ def download_image(image_url):
             )
 
             print(
-                "[Download] JPEG quality "
-                f"{quality}: "
+                "[Download] "
+                f"JPEG quality {quality}: "
                 f"{size_mb:.2f} MB"
             )
 
-            if len(compressed_data) <= max_size:
+            if (
+                len(compressed_data)
+                <= max_size
+            ):
                 print(
                     "[Download] "
                     "Сжатие успешно."
@@ -848,7 +898,7 @@ def download_image(image_url):
                 )
 
         # =================================================
-        # SECOND STAGE — RESIZE
+        # RESIZE
         # =================================================
 
         print(
@@ -861,7 +911,9 @@ def download_image(image_url):
             "Уменьшаем разрешение..."
         )
 
-        current_image = image.copy()
+        current_image = (
+            image.copy()
+        )
 
         for scale in [
             0.90,
@@ -888,12 +940,14 @@ def download_image(image_url):
                 ),
             )
 
-            current_image = image.resize(
-                (
-                    new_width,
-                    new_height,
-                ),
-                Image.LANCZOS,
+            current_image = (
+                image.resize(
+                    (
+                        new_width,
+                        new_height,
+                    ),
+                    Image.LANCZOS,
+                )
             )
 
             for quality in [
@@ -925,7 +979,8 @@ def download_image(image_url):
 
                 print(
                     "[Download] "
-                    f"{new_width}x{new_height}, "
+                    f"{new_width}x"
+                    f"{new_height}, "
                     f"quality {quality}: "
                     f"{size_mb:.2f} MB"
                 )
@@ -964,8 +1019,14 @@ def download_image(image_url):
 # =========================================================
 
 def send_to_discord(image):
-    source = image["source"]
-    image_url = image["url"]
+    source = image.get(
+        "source",
+        "Unknown",
+    )
+
+    image_url = image.get(
+        "url"
+    )
 
     tags = image.get(
         "tags"
@@ -980,6 +1041,10 @@ def send_to_discord(image):
 
     if post_id is None:
         post_id = "—"
+
+    # =====================================================
+    # WEBHOOK MAP
+    # =====================================================
 
     webhook_map = {
         "Waifu.im": (
@@ -1015,7 +1080,7 @@ def send_to_discord(image):
         )
 
     # =====================================================
-    # SOURCE INFO
+    # INFO
     # =====================================================
 
     print(
@@ -1061,7 +1126,7 @@ def send_to_discord(image):
     )
 
     # =====================================================
-    # DISCORD MESSAGE
+    # MESSAGE
     # =====================================================
 
     message_content = (
@@ -1071,42 +1136,217 @@ def send_to_discord(image):
         f"ID поста: {post_id}"
     )
 
-    response = requests.post(
-        webhook_url,
-        data={
-            "content": message_content
-        },
-        files={
-            "file": (
-                filename,
-                image_data,
-                content_type,
-            )
-        },
-        timeout=45,
-    )
+    # =====================================================
+    # SEND
+    # =====================================================
+
+    try:
+        response = requests.post(
+            webhook_url,
+            data={
+                "content": message_content
+            },
+            files={
+                "file": (
+                    filename,
+                    image_data,
+                    content_type,
+                )
+            },
+            timeout=45,
+        )
+
+    except requests.RequestException as error:
+        print(
+            "[Discord] "
+            "Ошибка соединения:"
+        )
+
+        print(
+            f"[Discord] {error}"
+        )
+
+        raise RuntimeError(
+            "Discord connection error: "
+            f"{error}"
+        )
+
+    # =====================================================
+    # STATUS
+    # =====================================================
 
     print(
         "[Discord] HTTP: "
         f"{response.status_code}"
     )
 
-    if not response.ok:
+    # =====================================================
+    # SUCCESS
+    # =====================================================
+
+    if response.ok:
         print(
-            "[Discord] Ответ: "
-            f"{response.text[:1000]}"
+            "[Discord] "
+            f"Успешно отправлено: "
+            f"{source}"
+        )
+
+        print(
+            "[Discord] "
+            f"Тег: {tags}"
+        )
+
+        print(
+            "[Discord] "
+            f"ID поста: {post_id}"
+        )
+
+        return
+
+    # =====================================================
+    # PARSE DISCORD ERROR
+    # =====================================================
+
+    discord_code = None
+
+    discord_message = None
+
+    error_data = None
+
+    try:
+        error_data = response.json()
+
+        discord_code = (
+            error_data.get("code")
+        )
+
+        discord_message = (
+            error_data.get("message")
+        )
+
+    except ValueError:
+        discord_message = (
+            response.text
+        )
+
+    # =====================================================
+    # DISCORD 400 / 20009
+    # =====================================================
+
+    if (
+        response.status_code == 400
+        and discord_code == 20009
+    ):
+        print(
+            "======================================================="
+        )
+
+        print(
+            "[Discord] ОШИБКА 20009"
+        )
+
+        print(
+            "[Discord] "
+            "Discord отклонил изображение."
+        )
+
+        print(
+            "[Discord] "
+            "Safe content cannot be sent "
+            "to the desired recipient(s)."
+        )
+
+        print(
+            "[Discord] "
+            f"Источник: {source}"
+        )
+
+        print(
+            "[Discord] "
+            f"Тег: {tags}"
+        )
+
+        print(
+            "[Discord] "
+            f"ID поста: {post_id}"
+        )
+
+        print(
+            "[Discord] "
+            f"HTTP: {response.status_code}"
+        )
+
+        print(
+            "[Discord] "
+            f"Discord code: {discord_code}"
+        )
+
+        print(
+            "[Discord] "
+            f"Сообщение: {discord_message}"
+        )
+
+        print(
+            "[Discord] "
+            "Проверь настройки "
+            "Discord-канала/получателя."
+        )
+
+        print(
+            "======================================================="
         )
 
         raise RuntimeError(
-            f"Discord HTTP "
-            f"{response.status_code}: "
-            f"{response.text[:500]}"
+            "Discord отклонил SAFE-контент "
+            "(code 20009). "
+            f"Источник: {source}; "
+            f"тег: {tags}; "
+            f"ID: {post_id}"
         )
+
+    # =====================================================
+    # OTHER DISCORD ERRORS
+    # =====================================================
 
     print(
         "[Discord] "
-        f"Успешно отправлено: "
-        f"{source}"
+        "Неизвестная ошибка Discord."
+    )
+
+    print(
+        "[Discord] "
+        f"HTTP: {response.status_code}"
+    )
+
+    print(
+        "[Discord] "
+        f"Discord code: {discord_code}"
+    )
+
+    print(
+        "[Discord] "
+        f"Сообщение: {discord_message}"
+    )
+
+    print(
+        "[Discord] "
+        f"Источник: {source}"
+    )
+
+    print(
+        "[Discord] "
+        f"Тег: {tags}"
+    )
+
+    print(
+        "[Discord] "
+        f"ID поста: {post_id}"
+    )
+
+    raise RuntimeError(
+        f"Discord HTTP "
+        f"{response.status_code}: "
+        f"{discord_message or response.text[:500]}"
     )
 
 
@@ -1127,17 +1367,20 @@ def publish_source(
 
         print(
             f"[{name}] "
-            f"Источник: {image.get('source')}"
+            f"Источник: "
+            f"{image.get('source')}"
         )
 
         print(
             f"[{name}] "
-            f"Тег: {image.get('tags') or '—'}"
+            f"Тег: "
+            f"{image.get('tags') or '—'}"
         )
 
         print(
             f"[{name}] "
-            f"ID поста: {image.get('post_id') or '—'}"
+            f"ID поста: "
+            f"{image.get('post_id') or '—'}"
         )
 
         print(
@@ -1190,6 +1433,10 @@ def post_image():
 
     sources = []
 
+    # =====================================================
+    # WAIFU
+    # =====================================================
+
     if WAIFU_WEBHOOK_URL:
         sources.append(
             (
@@ -1197,6 +1444,10 @@ def post_image():
                 get_random_waifu,
             )
         )
+
+    # =====================================================
+    # DANBOORU ANIME
+    # =====================================================
 
     if (
         DANBOORU_WEBHOOK_URL
@@ -1210,6 +1461,10 @@ def post_image():
             )
         )
 
+    # =====================================================
+    # DANBOORU GAMES
+    # =====================================================
+
     if (
         DANBOORU_GAMES_WEBHOOK_URL
         and DANBOORU_USERNAME
@@ -1222,11 +1477,19 @@ def post_image():
             )
         )
 
+    # =====================================================
+    # NO SOURCES
+    # =====================================================
+
     if not sources:
         return Response(
             "No sources configured",
             status=500,
         )
+
+    # =====================================================
+    # PUBLISH ALL
+    # =====================================================
 
     results = []
 
@@ -1238,6 +1501,10 @@ def post_image():
             )
         )
 
+    # =====================================================
+    # RESULTS
+    # =====================================================
+
     successful = sum(
         1
         for result in results
@@ -1245,7 +1512,8 @@ def post_image():
     )
 
     errors = (
-        len(results) - successful
+        len(results)
+        - successful
     )
 
     print(
