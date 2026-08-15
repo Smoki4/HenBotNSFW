@@ -1,3 +1,4 @@
+```python
 import os
 import random
 import threading
@@ -316,84 +317,19 @@ DANBOORU_ANIME_TAGS = [
     "rating:explicit furry",
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
+    "rating:explicit teto",
+    "rating:explicit neru",
 ]
 
 
 def get_danbooru_anime():
-    """
-    Ищет новый SAFE-пост.
+    tags = random.choice(
+        DANBOORU_ANIME_TAGS
+    )
 
-    Если один набор тегов пустой или весь уже использован,
-    автоматически пробует следующий.
-    """
-
-    tags_list = DANBOORU_ANIME_TAGS[:]
-
-    random.shuffle(tags_list)
-
-    last_error = None
-
-    for tags in tags_list:
-        try:
-            print(
-                "[Danbooru Anime] "
-                f"Пробуем: {tags}"
-            )
-
-            result = get_random_danbooru(
-                tags,
-                "Danbooru Anime",
-            )
-
-            if result:
-                print(
-                    "[Danbooru Anime] "
-                    "Новый пост найден"
-                )
-
-                return result
-
-        except Exception as error:
-            last_error = error
-
-            print(
-                "[Danbooru Anime] "
-                f"Запрос не подошёл: {error}"
-            )
-
-            continue
-
-    # Последний fallback — широкий SAFE-запрос.
-    try:
-        print(
-            "[Danbooru Anime] "
-            "Пробуем общий SAFE fallback"
-        )
-
-        result = get_random_danbooru(
-            "rating:explicit",
-            "Danbooru Anime",
-        )
-
-        if result:
-            return result
-
-    except Exception as error:
-        last_error = error
-
-        print(
-            "[Danbooru Anime] "
-            f"Fallback ошибка: {error}"
-        )
-
-    raise RuntimeError(
-        "Danbooru Anime: "
-        "не удалось найти новый SAFE пост"
-        + (
-            f": {last_error}"
-            if last_error
-            else ""
-        )
+    return get_random_danbooru(
+        tags,
+        "Danbooru Anime",
     )
 
 
@@ -438,80 +374,23 @@ DANBOORU_GAME_TAGS = [
 
 
 def get_danbooru_games():
-    """
-    Ищет новый SAFE игровой пост.
+    print(
+        "[Danbooru Games] "
+        "Ищем игровой SAFE арт..."
+    )
 
-    Если один набор тегов пустой или весь уже использован,
-    автоматически пробует следующий.
-    """
+    tags = random.choice(
+        DANBOORU_GAME_TAGS
+    )
 
-    tags_list = DANBOORU_GAME_TAGS[:]
+    print(
+        "[Danbooru Games] "
+        f"Выбран запрос: {tags}"
+    )
 
-    random.shuffle(tags_list)
-
-    last_error = None
-
-    for tags in tags_list:
-        try:
-            print(
-                "[Danbooru Games] "
-                f"Пробуем: {tags}"
-            )
-
-            result = get_random_danbooru(
-                tags,
-                "Danbooru Games",
-            )
-
-            if result:
-                print(
-                    "[Danbooru Games] "
-                    "Новый игровой пост найден"
-                )
-
-                return result
-
-        except Exception as error:
-            last_error = error
-
-            print(
-                "[Danbooru Games] "
-                f"Запрос не подошёл: {error}"
-            )
-
-            continue
-
-    # Последний fallback — широкий SAFE-запрос.
-    try:
-        print(
-            "[Danbooru Games] "
-            "Пробуем общий SAFE fallback"
-        )
-
-        result = get_random_danbooru(
-            "rating:explicit",
-            "Danbooru Games",
-        )
-
-        if result:
-            return result
-
-    except Exception as error:
-        last_error = error
-
-        print(
-            "[Danbooru Games] "
-            f"Fallback ошибка: {error}"
-        )
-
-    raise RuntimeError(
-        "Danbooru Games: "
-        "не удалось найти новый SAFE пост"
-        + (
-            f": {last_error}"
-            if last_error
-            else ""
-        )
+    return get_random_danbooru(
+        tags,
+        "Danbooru Games",
     )
 
 
@@ -520,9 +399,6 @@ def get_danbooru_games():
 # =========================================================
 
 def download_image(image_url):
-    from io import BytesIO
-    from PIL import Image
-
     max_size = 8 * 1024 * 1024
 
     response = requests.get(
@@ -543,20 +419,15 @@ def download_image(image_url):
         "Content-Length"
     )
 
-    # Если сервер сразу сообщил размер,
-    # просто предупреждаем в логах.
     if content_length:
         try:
-            size_mb = (
-                int(content_length)
-                / 1024
-                / 1024
-            )
+            if int(content_length) > max_size:
+                response.close()
 
-            print(
-                "[Download] Размер исходника: "
-                f"{size_mb:.2f} MB"
-            )
+                raise RuntimeError(
+                    "Изображение "
+                    "больше 8 MB"
+                )
 
         except ValueError:
             pass
@@ -573,276 +444,41 @@ def download_image(image_url):
 
             total += len(chunk)
 
+            if total > max_size:
+                raise RuntimeError(
+                    "Изображение "
+                    "больше 8 MB"
+                )
+
             chunks.append(chunk)
 
     finally:
         response.close()
 
-    original_data = b"".join(chunks)
+    content = b"".join(chunks)
 
-    print(
-        "[Download] Получено: "
-        f"{len(original_data) / 1024 / 1024:.2f} MB"
+    content_type_lower = (
+        content_type.lower()
     )
 
-    # Если исходный файл уже подходит,
-    # отправляем его без изменений.
-    if len(original_data) <= max_size:
-        content_type_lower = (
-            content_type.lower()
-        )
+    if "png" in content_type_lower:
+        extension = "png"
+    elif "webp" in content_type_lower:
+        extension = "webp"
+    elif "gif" in content_type_lower:
+        extension = "gif"
+    elif "jpeg" in content_type_lower:
+        extension = "jpg"
+    else:
+        extension = "jpg"
 
-        if "png" in content_type_lower:
-            extension = "png"
-        elif "webp" in content_type_lower:
-            extension = "webp"
-        elif "gif" in content_type_lower:
-            extension = "gif"
-        elif "jpeg" in content_type_lower:
-            extension = "jpg"
-        else:
-            extension = "jpg"
+    filename = f"image.{extension}"
 
-        filename = f"image.{extension}"
-
-        return (
-            filename,
-            original_data,
-            content_type,
-        )
-
-    # =====================================================
-    # IMAGE TOO LARGE
-    # =====================================================
-
-    print(
-        "[Download] Изображение больше 8 MB."
+    return (
+        filename,
+        content,
+        content_type,
     )
-
-    print(
-        "[Download] Начинаем автоматическое сжатие..."
-    )
-
-    try:
-        image = Image.open(
-            BytesIO(original_data)
-        )
-
-        print(
-            "[Download] Формат: "
-            f"{image.format}"
-        )
-
-        print(
-            "[Download] Разрешение: "
-            f"{image.width}x{image.height}"
-        )
-
-        # Анимацию не обрабатываем как обычную картинку.
-        if getattr(
-            image,
-            "is_animated",
-            False,
-        ):
-            raise RuntimeError(
-                "Анимированное изображение "
-                "больше 8 MB"
-            )
-
-        # Для JPEG нужен RGB.
-        if image.mode in (
-            "RGBA",
-            "LA",
-            "P",
-        ):
-            background = Image.new(
-                "RGB",
-                image.size,
-                "white",
-            )
-
-            if image.mode == "P":
-                image = image.convert(
-                    "RGBA"
-                )
-
-            if image.mode in (
-                "RGBA",
-                "LA",
-            ):
-                background.paste(
-                    image,
-                    mask=image.getchannel(
-                        "A"
-                    ),
-                )
-
-                image = background
-
-            else:
-                image = image.convert(
-                    "RGB"
-                )
-
-        else:
-            image = image.convert(
-                "RGB"
-            )
-
-        # =================================================
-        # ПЕРВЫЙ ЭТАП — JPEG QUALITY
-        # =================================================
-
-        qualities = [
-            90,
-            85,
-            80,
-            75,
-            70,
-            65,
-            60,
-            55,
-            50,
-            45,
-            40,
-        ]
-
-        for quality in qualities:
-            output = BytesIO()
-
-            image.save(
-                output,
-                format="JPEG",
-                quality=quality,
-                optimize=True,
-            )
-
-            compressed_data = (
-                output.getvalue()
-            )
-
-            print(
-                "[Download] JPEG quality "
-                f"{quality}: "
-                f"{len(compressed_data) / 1024 / 1024:.2f} MB"
-            )
-
-            if len(compressed_data) <= max_size:
-                print(
-                    "[Download] "
-                    "Сжатие успешно"
-                )
-
-                return (
-                    "image.jpg",
-                    compressed_data,
-                    "image/jpeg",
-                )
-
-        # =================================================
-        # ВТОРОЙ ЭТАП — УМЕНЬШАЕМ РАЗРЕШЕНИЕ
-        # =================================================
-
-        print(
-            "[Download] "
-            "Quality недостаточно."
-        )
-
-        print(
-            "[Download] "
-            "Уменьшаем разрешение..."
-        )
-
-        current_image = image.copy()
-
-        for scale in [
-            0.90,
-            0.80,
-            0.70,
-            0.60,
-            0.50,
-            0.40,
-            0.30,
-        ]:
-            new_width = max(
-                1,
-                int(
-                    image.width
-                    * scale
-                ),
-            )
-
-            new_height = max(
-                1,
-                int(
-                    image.height
-                    * scale
-                ),
-            )
-
-            current_image = image.resize(
-                (
-                    new_width,
-                    new_height,
-                ),
-                Image.LANCZOS,
-            )
-
-            for quality in [
-                85,
-                75,
-                65,
-                55,
-                45,
-                35,
-            ]:
-                output = BytesIO()
-
-                current_image.save(
-                    output,
-                    format="JPEG",
-                    quality=quality,
-                    optimize=True,
-                )
-
-                compressed_data = (
-                    output.getvalue()
-                )
-
-                print(
-                    "[Download] "
-                    f"{new_width}x{new_height}, "
-                    f"quality {quality}: "
-                    f"{len(compressed_data) / 1024 / 1024:.2f} MB"
-                )
-
-                if (
-                    len(compressed_data)
-                    <= max_size
-                ):
-                    print(
-                        "[Download] "
-                        "Изображение "
-                        "успешно сжато"
-                    )
-
-                    return (
-                        "image.jpg",
-                        compressed_data,
-                        "image/jpeg",
-                    )
-
-        raise RuntimeError(
-            "Не удалось сжать "
-            "изображение до 8 MB"
-        )
-
-    except Exception as error:
-        raise RuntimeError(
-            "Изображение больше 8 MB "
-            "и не удалось его сжать: "
-            f"{error}"
-        )
 
 
 # =========================================================
@@ -1173,3 +809,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
+```
