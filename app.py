@@ -1,4 +1,4 @@
-```python
+
 import os
 import random
 import threading
@@ -8,9 +8,7 @@ import xml.etree.ElementTree as ET
 import requests
 from flask import Flask, Response
 
-
 app = Flask(__name__)
-
 
 # =========================================================
 # ENV
@@ -18,9 +16,7 @@ app = Flask(__name__)
 
 WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
 DANBOORU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_DANBOORU")
-RULE34_GAMES_WEBHOOK_URL = os.environ.get(
-    "DISCORD_WEBHOOK_RULE34_GAMES"
-)
+RULE34_GAMES_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_RULE34_GAMES")
 PEXELS_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PEXELS")
 
 DANBOORU_USERNAME = os.environ.get("DANBOORU_USERNAME")
@@ -31,22 +27,38 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 RULE34_USERNAME = os.environ.get("RULE34_USERNAME")
 RULE34_API_KEY = os.environ.get("RULE34_API_KEY")
 
-
-# =========================================================
-# API
-# =========================================================
+# Теперь рейтинг можно менять прямо в Render.
+# Если переменная отсутствует — используется SAFE.
+RULE34_RATING = os.environ.get(
+    "RULE34_RATING",
+    "rating:explicit"
+).strip()
 
 DANBOORU_API = "https://danbooru.donmai.us"
 PEXELS_API = "https://api.pexels.com/v1"
 RULE34_API = "https://api.rule34.xxx/index.php"
 
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; GamePoster/1.0)"
+}
+
+DANBOORU_HEADERS = {
+    "User-Agent": (
+        "GamePoster/1.0 "
+        f"(user {DANBOORU_USERNAME or 'unknown'})"
+    ),
+    "Accept": "application/json",
+}
+
+RULE34_HEADERS = {
+    "User-Agent": "GamePoster/1.0",
+    "Accept": "application/json, application/xml, text/xml, text/plain, */*",
+}
+
 
 # =========================================================
-# RULE34
+# RULE34 GAME TAGS
 # =========================================================
-
-# ВАЖНО: здесь именно SAFE.
-RULE34_RATING = "rating:safe"
 
 RULE34_GAME_TAGS = [
     "genshin_impact",
@@ -103,28 +115,6 @@ RULE34_GAME_TAGS = [
     "furry",
     "risk_of_rain_2",
 ]
-
-
-# =========================================================
-# HEADERS
-# =========================================================
-
-DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; GamePoster/1.0)"
-}
-
-DANBOORU_HEADERS = {
-    "User-Agent": (
-        "GamePoster/1.0 "
-        f"(user {DANBOORU_USERNAME or 'unknown'})"
-    ),
-    "Accept": "application/json",
-}
-
-RULE34_HEADERS = {
-    "User-Agent": "GamePoster/1.0",
-    "Accept": "application/json, application/xml, text/xml, text/plain, */*",
-}
 
 
 # =========================================================
@@ -300,13 +290,11 @@ def get_random_danbooru(tags, source_name):
         if not image_url:
             continue
 
-        candidates.append(
-            {
-                "url": image_url,
-                "source": source_name,
-                "post_id": post_id,
-            }
-        )
+        candidates.append({
+            "url": image_url,
+            "source": source_name,
+            "post_id": post_id,
+        })
 
     if not candidates:
         raise RuntimeError(
@@ -326,35 +314,33 @@ def get_random_danbooru(tags, source_name):
 
 
 def get_danbooru_anime():
-    tags = random.choice(
-        [
-            "rating:safe anime",
-            "rating:safe 1girl",
-            "rating:safe 1boy",
-            "rating:safe 2girls",
-            "rating:safe solo",
-            "rating:safe scenery",
-            "rating:safe landscape",
-            "rating:safe fantasy",
-            "rating:safe school_uniform",
-            "rating:safe animal_ears",
-            "rating:safe bleach",
-            "rating:safe furry",
-            "rating:safe fnaf",
-            "rating:safe re_zero",
-            "rating:safe vocaloid",
-            "rating:safe teto",
-            "rating:safe miku",
-            "rating:safe neru",
-            "rating:safe games",
-            "rating:safe risk_of_rain_2",
-            "rating:safe dead_by_daylight",
-            "rating:safe pubg",
-            "rating:safe dota_2",
-            "rating:safe zenless_zone_zero",
-            "rating:safe genshin_impact",
-        ]
-    )
+    tags = random.choice([
+        "rating:safe anime",
+        "rating:safe 1girl",
+        "rating:safe 1boy",
+        "rating:safe 2girls",
+        "rating:safe solo",
+        "rating:safe scenery",
+        "rating:safe landscape",
+        "rating:safe fantasy",
+        "rating:safe school_uniform",
+        "rating:safe animal_ears",
+        "rating:safe bleach",
+        "rating:safe furry",
+        "rating:safe fnaf",
+        "rating:safe re_zero",
+        "rating:safe vocaloid",
+        "rating:safe teto",
+        "rating:safe miku",
+        "rating:safe neru",
+        "rating:safe games",
+        "rating:safe risk_of_rain_2",
+        "rating:safe dead_by_daylight",
+        "rating:safe pubg",
+        "rating:safe dota_2",
+        "rating:safe zenless_zone_zero",
+        "rating:safe genshin_impact",
+    ])
 
     return get_random_danbooru(
         tags,
@@ -387,7 +373,6 @@ def parse_rule34_response(response):
         f"{text[:500]}"
     )
 
-    # JSON
     try:
         data = response.json()
 
@@ -408,7 +393,6 @@ def parse_rule34_response(response):
     except ValueError:
         pass
 
-    # Authentication error
     lower_text = text.lower()
 
     if (
@@ -421,7 +405,6 @@ def parse_rule34_response(response):
             "Rule34 API отклонил authentication credentials"
         )
 
-    # XML
     if (
         "xml" in content_type
         or text.startswith("<?xml")
@@ -485,7 +468,7 @@ def rule34_params():
 def get_rule34_games():
     print(
         "[Rule34 Games] "
-        "Ищем SAFE игровой арт..."
+        f"Ищем изображения с рейтингом: {RULE34_RATING}"
     )
 
     if not rule34_auth_available():
@@ -504,8 +487,8 @@ def get_rule34_games():
 
         params = rule34_params()
 
-        # ВАЖНО:
-        # здесь SAFE, а не EXPLICIT.
+        # Рейтинг теперь полностью управляется
+        # переменной RULE34_RATING в Render.
         params["tags"] = (
             f"{game_tag} {RULE34_RATING}"
         )
@@ -542,8 +525,6 @@ def get_rule34_games():
                 f"Ошибка API: {error}"
             )
 
-            # Ошибка авторизации не исправится
-            # сменой игрового тега.
             if (
                 "authentication" in str(error).lower()
                 or "credentials" in str(error).lower()
@@ -555,7 +536,7 @@ def get_rule34_games():
         if not posts:
             print(
                 "[Rule34 Games] "
-                f"Нет SAFE результатов для {game_tag}"
+                f"Нет результатов для {game_tag}"
             )
             continue
 
@@ -619,7 +600,7 @@ def get_rule34_games():
 
     raise RuntimeError(
         "Rule34 Games: "
-        "не удалось найти подходящий SAFE игровой пост"
+        "не удалось найти подходящий пост"
     )
 
 
@@ -670,10 +651,7 @@ def get_random_pexels():
 
             data = response.json()
 
-            photos = data.get(
-                "photos",
-                [],
-            )
+            photos = data.get("photos", [])
 
             if not photos:
                 continue
@@ -681,10 +659,7 @@ def get_random_pexels():
             random.shuffle(photos)
 
             for photo in photos:
-                src = photo.get(
-                    "src",
-                    {},
-                )
+                src = photo.get("src", {})
 
                 image_url = (
                     src.get("large2x")
@@ -776,8 +751,6 @@ def download_image(image_url):
         extension = "webp"
     elif "gif" in content_type_lower:
         extension = "gif"
-    elif "jpeg" in content_type_lower:
-        extension = "jpg"
     else:
         extension = "jpg"
 
@@ -829,11 +802,9 @@ def send_to_discord(image):
             f"Webhook для {source} не настроен"
         )
 
-    (
-        filename,
-        image_data,
-        content_type,
-    ) = download_image(image_url)
+    filename, image_data, content_type = (
+        download_image(image_url)
+    )
 
     response = requests.post(
         webhook_url,
@@ -920,10 +891,7 @@ def post_image():
 
     if WAIFU_WEBHOOK_URL:
         sources.append(
-            (
-                "Waifu.im",
-                get_random_waifu,
-            )
+            ("Waifu.im", get_random_waifu)
         )
 
     if (
@@ -1029,16 +997,9 @@ def status():
     }
 
 
-# =========================================================
-# PING
-# =========================================================
-
 @app.route("/ping")
 def ping():
-    return Response(
-        "OK",
-        status=200,
-    )
+    return Response("OK", status=200)
 
 
 @app.route("/")
@@ -1055,14 +1016,11 @@ def home():
 
 if __name__ == "__main__":
     port = int(
-        os.environ.get(
-            "PORT",
-            "8080",
-        )
+        os.environ.get("PORT", "8080")
     )
 
     app.run(
         host="0.0.0.0",
         port=port,
     )
-```
+
