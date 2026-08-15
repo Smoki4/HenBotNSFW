@@ -1,3 +1,4 @@
+
 import os
 import random
 import threading
@@ -520,6 +521,9 @@ def get_danbooru_games():
 # =========================================================
 
 def download_image(image_url):
+    from io import BytesIO
+    from PIL import Image
+
     max_size = 8 * 1024 * 1024
 
     response = requests.get(
@@ -540,15 +544,20 @@ def download_image(image_url):
         "Content-Length"
     )
 
+    # Если сервер сразу сообщил размер,
+    # просто предупреждаем в логах.
     if content_length:
         try:
-            if int(content_length) > max_size:
-                response.close()
+            size_mb = (
+                int(content_length)
+                / 1024
+                / 1024
+            )
 
-                raise RuntimeError(
-                    "Изображение "
-                    "больше 8 MB"
-                )
+            print(
+                "[Download] Размер исходника: "
+                f"{size_mb:.2f} MB"
+            )
 
         except ValueError:
             pass
@@ -565,41 +574,276 @@ def download_image(image_url):
 
             total += len(chunk)
 
-            if total > max_size:
-                raise RuntimeError(
-                    "Изображение "
-                    "больше 8 MB"
-                )
-
             chunks.append(chunk)
 
     finally:
         response.close()
 
-    content = b"".join(chunks)
+    original_data = b"".join(chunks)
 
-    content_type_lower = (
-        content_type.lower()
+    print(
+        "[Download] Получено: "
+        f"{len(original_data) / 1024 / 1024:.2f} MB"
     )
 
-    if "png" in content_type_lower:
-        extension = "png"
-    elif "webp" in content_type_lower:
-        extension = "webp"
-    elif "gif" in content_type_lower:
-        extension = "gif"
-    elif "jpeg" in content_type_lower:
-        extension = "jpg"
-    else:
-        extension = "jpg"
+    # Если исходный файл уже подходит,
+    # отправляем его без изменений.
+    if len(original_data) <= max_size:
+        content_type_lower = (
+            content_type.lower()
+        )
 
-    filename = f"image.{extension}"
+        if "png" in content_type_lower:
+            extension = "png"
+        elif "webp" in content_type_lower:
+            extension = "webp"
+        elif "gif" in content_type_lower:
+            extension = "gif"
+        elif "jpeg" in content_type_lower:
+            extension = "jpg"
+        else:
+            extension = "jpg"
 
-    return (
-        filename,
-        content,
-        content_type,
+        filename = f"image.{extension}"
+
+        return (
+            filename,
+            original_data,
+            content_type,
+        )
+
+    # =====================================================
+    # IMAGE TOO LARGE
+    # =====================================================
+
+    print(
+        "[Download] Изображение больше 8 MB."
     )
+
+    print(
+        "[Download] Начинаем автоматическое сжатие..."
+    )
+
+    try:
+        image = Image.open(
+            BytesIO(original_data)
+        )
+
+        print(
+            "[Download] Формат: "
+            f"{image.format}"
+        )
+
+        print(
+            "[Download] Разрешение: "
+            f"{image.width}x{image.height}"
+        )
+
+        # Анимацию не обрабатываем как обычную картинку.
+        if getattr(
+            image,
+            "is_animated",
+            False,
+        ):
+            raise RuntimeError(
+                "Анимированное изображение "
+                "больше 8 MB"
+            )
+
+        # Для JPEG нужен RGB.
+        if image.mode in (
+            "RGBA",
+            "LA",
+            "P",
+        ):
+            background = Image.new(
+                "RGB",
+                image.size,
+                "white",
+            )
+
+            if image.mode == "P":
+                image = image.convert(
+                    "RGBA"
+                )
+
+            if image.mode in (
+                "RGBA",
+                "LA",
+            ):
+                background.paste(
+                    image,
+                    mask=image.getchannel(
+                        "A"
+                    ),
+                )
+
+                image = background
+
+            else:
+                image = image.convert(
+                    "RGB"
+                )
+
+        else:
+            image = image.convert(
+                "RGB"
+            )
+
+        # =================================================
+        # ПЕРВЫЙ ЭТАП — JPEG QUALITY
+        # =================================================
+
+        qualities = [
+            90,
+            85,
+            80,
+            75,
+            70,
+            65,
+            60,
+            55,
+            50,
+            45,
+            40,
+        ]
+
+        for quality in qualities:
+            output = BytesIO()
+
+            image.save(
+                output,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+            )
+
+            compressed_data = (
+                output.getvalue()
+            )
+
+            print(
+                "[Download] JPEG quality "
+                f"{quality}: "
+                f"{len(compressed_data) / 1024 / 1024:.2f} MB"
+            )
+
+            if len(compressed_data) <= max_size:
+                print(
+                    "[Download] "
+                    "Сжатие успешно"
+                )
+
+                return (
+                    "image.jpg",
+                    compressed_data,
+                    "image/jpeg",
+                )
+
+        # =================================================
+        # ВТОРОЙ ЭТАП — УМЕНЬШАЕМ РАЗРЕШЕНИЕ
+        # =================================================
+
+        print(
+            "[Download] "
+            "Quality недостаточно."
+        )
+
+        print(
+            "[Download] "
+            "Уменьшаем разрешение..."
+        )
+
+        current_image = image.copy()
+
+        for scale in [
+            0.90,
+            0.80,
+            0.70,
+            0.60,
+            0.50,
+            0.40,
+            0.30,
+        ]:
+            new_width = max(
+                1,
+                int(
+                    image.width
+                    * scale
+                ),
+            )
+
+            new_height = max(
+                1,
+                int(
+                    image.height
+                    * scale
+                ),
+            )
+
+            current_image = image.resize(
+                (
+                    new_width,
+                    new_height,
+                ),
+                Image.LANCZOS,
+            )
+
+            for quality in [
+                85,
+                75,
+                65,
+                55,
+                45,
+                35,
+            ]:
+                output = BytesIO()
+
+                current_image.save(
+                    output,
+                    format="JPEG",
+                    quality=quality,
+                    optimize=True,
+                )
+
+                compressed_data = (
+                    output.getvalue()
+                )
+
+                print(
+                    "[Download] "
+                    f"{new_width}x{new_height}, "
+                    f"quality {quality}: "
+                    f"{len(compressed_data) / 1024 / 1024:.2f} MB"
+                )
+
+                if (
+                    len(compressed_data)
+                    <= max_size
+                ):
+                    print(
+                        "[Download] "
+                        "Изображение "
+                        "успешно сжато"
+                    )
+
+                    return (
+                        "image.jpg",
+                        compressed_data,
+                        "image/jpeg",
+                    )
+
+        raise RuntimeError(
+            "Не удалось сжать "
+            "изображение до 8 MB"
+        )
+
+    except Exception as error:
+        raise RuntimeError(
+            "Изображение больше 8 MB "
+            "и не удалось его сжать: "
+            f"{error}"
+        )
 
 
 # =========================================================
