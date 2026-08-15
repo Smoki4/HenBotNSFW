@@ -799,7 +799,7 @@ def send_to_discord(image):
     )
 
 
-    },
+   
     files={
         "file": (
             filename,
