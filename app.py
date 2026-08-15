@@ -178,9 +178,24 @@ def get_random_waifu():
             if not image_url:
                 continue
 
+            print(
+                "[Waifu.im] "
+                "Изображение найдено"
+            )
+
+            print(
+                "[Waifu.im] Тег: —"
+            )
+
+            print(
+                "[Waifu.im] ID поста: —"
+            )
+
             return {
                 "url": image_url,
                 "source": "Waifu.im",
+                "tags": None,
+                "post_id": None,
             }
 
         except Exception as error:
@@ -219,6 +234,11 @@ def get_random_danbooru(
     print(
         f"[{source_name}] "
         f"Запрос: {tags}"
+    )
+
+    print(
+        f"[{source_name}] "
+        f"Тег: {tags}"
     )
 
     danbooru_wait()
@@ -277,6 +297,7 @@ def get_random_danbooru(
                 "url": image_url,
                 "source": source_name,
                 "post_id": post_id,
+                "tags": tags,
             }
         )
 
@@ -297,6 +318,18 @@ def get_random_danbooru(
         selected.get("post_id"),
     )
 
+    print(
+        f"[{source_name}] "
+        f"Выбран Post ID: "
+        f"{selected.get('post_id')}"
+    )
+
+    print(
+        f"[{source_name}] "
+        f"Использованный тег: "
+        f"{selected.get('tags')}"
+    )
+
     return selected
 
 
@@ -305,24 +338,24 @@ def get_random_danbooru(
 # =========================================================
 
 DANBOORU_ANIME_TAGS = [
-    "rating:explicit anime",
-    "rating:explicit 1girl",
-    "rating:explicit 1boy",
-    "rating:explicit solo",
-    "rating:explicit scenery",
-    "rating:explicit landscape",
-    "rating:explicit fantasy",
-    "rating:explicit school_uniform",
-    "rating:explicit animal_ears",
-    "rating:explicit furry",
-    "rating:explicit vocaloid",
-    "rating:explicit hatsune_miku",
+    "rating:safe anime",
+    "rating:safe 1girl",
+    "rating:safe 1boy",
+    "rating:safe solo",
+    "rating:safe scenery",
+    "rating:safe landscape",
+    "rating:safe fantasy",
+    "rating:safe school_uniform",
+    "rating:safe animal_ears",
+    "rating:safe furry",
+    "rating:safe vocaloid",
+    "rating:safe hatsune_miku",
 ]
 
 
 def get_danbooru_anime():
     """
-    Ищет новый explicit-пост.
+    Ищет новый SAFE-пост.
 
     Если один набор тегов пустой или весь уже использован,
     автоматически пробует следующий.
@@ -338,7 +371,7 @@ def get_danbooru_anime():
         try:
             print(
                 "[Danbooru Anime] "
-                f"Пробуем: {tags}"
+                f"Пробуем тег: {tags}"
             )
 
             result = get_random_danbooru(
@@ -350,6 +383,16 @@ def get_danbooru_anime():
                 print(
                     "[Danbooru Anime] "
                     "Новый пост найден"
+                )
+
+                print(
+                    "[Danbooru Anime] "
+                    f"Тег: {result.get('tags')}"
+                )
+
+                print(
+                    "[Danbooru Anime] "
+                    f"ID: {result.get('post_id')}"
                 )
 
                 return result
@@ -364,15 +407,15 @@ def get_danbooru_anime():
 
             continue
 
-    # Последний fallback — широкий explicit-запрос.
+    # Последний fallback — широкий SAFE-запрос.
     try:
         print(
             "[Danbooru Anime] "
-            "Пробуем общий explicit fallback"
+            "Пробуем общий SAFE fallback"
         )
 
         result = get_random_danbooru(
-            "rating:explicit",
+            "rating:safe",
             "Danbooru Anime",
         )
 
@@ -389,7 +432,7 @@ def get_danbooru_anime():
 
     raise RuntimeError(
         "Danbooru Anime: "
-        "не удалось найти новый explicit пост"
+        "не удалось найти новый SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -403,44 +446,44 @@ def get_danbooru_anime():
 # =========================================================
 
 DANBOORU_GAME_TAGS = [
-    "rating:explicit genshin_impact",
-    "rating:explicit honkai:_star_rail",
-    "rating:explicit zenless_zone_zero",
-    "rating:explicit league_of_legends",
-    "rating:explicit overwatch",
-    "rating:explicit valorant",
-    "rating:explicit apex_legends",
-    "rating:explicit fortnite",
-    "rating:explicit minecraft",
-    "rating:explicit pokemon",
-    "rating:explicit final_fantasy",
-    "rating:explicit resident_evil",
-    "rating:explicit nier_automata",
-    "rating:explicit cyberpunk_2077",
-    "rating:explicit the_witcher",
-    "rating:explicit baldurs_gate_3",
-    "rating:explicit elden_ring",
-    "rating:explicit dark_souls",
-    "rating:explicit devil_may_cry",
-    "rating:explicit guilty_gear",
-    "rating:explicit street_fighter",
-    "rating:explicit mortal_kombat",
-    "rating:explicit tekken",
-    "rating:explicit persona",
-    "rating:explicit dota_2",
-    "rating:explicit dead_by_daylight",
-    "rating:explicit risk_of_rain_2",
-    "rating:explicit fnaf",
-    "rating:explicit portal",
-    "rating:explicit halo",
-    "rating:explicit fallout",
-    "rating:explicit furry game_character",
+    "rating:safe genshin_impact",
+    "rating:safe honkai:_star_rail",
+    "rating:safe zenless_zone_zero",
+    "rating:safe league_of_legends",
+    "rating:safe overwatch",
+    "rating:safe valorant",
+    "rating:safe apex_legends",
+    "rating:safe fortnite",
+    "rating:safe minecraft",
+    "rating:safe pokemon",
+    "rating:safe final_fantasy",
+    "rating:safe resident_evil",
+    "rating:safe nier_automata",
+    "rating:safe cyberpunk_2077",
+    "rating:safe the_witcher",
+    "rating:safe baldurs_gate_3",
+    "rating:safe elden_ring",
+    "rating:safe dark_souls",
+    "rating:safe devil_may_cry",
+    "rating:safe guilty_gear",
+    "rating:safe street_fighter",
+    "rating:safe mortal_kombat",
+    "rating:safe tekken",
+    "rating:safe persona",
+    "rating:safe dota_2",
+    "rating:safe dead_by_daylight",
+    "rating:safe risk_of_rain_2",
+    "rating:safe fnaf",
+    "rating:safe portal",
+    "rating:safe halo",
+    "rating:safe fallout",
+    "rating:safe furry game_character",
 ]
 
 
 def get_danbooru_games():
     """
-    Ищет новый explicit игровой пост.
+    Ищет новый SAFE игровой пост.
 
     Если один набор тегов пустой или весь уже использован,
     автоматически пробует следующий.
@@ -456,7 +499,7 @@ def get_danbooru_games():
         try:
             print(
                 "[Danbooru Games] "
-                f"Пробуем: {tags}"
+                f"Пробуем тег: {tags}"
             )
 
             result = get_random_danbooru(
@@ -468,6 +511,16 @@ def get_danbooru_games():
                 print(
                     "[Danbooru Games] "
                     "Новый игровой пост найден"
+                )
+
+                print(
+                    "[Danbooru Games] "
+                    f"Тег: {result.get('tags')}"
+                )
+
+                print(
+                    "[Danbooru Games] "
+                    f"ID: {result.get('post_id')}"
                 )
 
                 return result
@@ -482,15 +535,15 @@ def get_danbooru_games():
 
             continue
 
-    # Последний fallback — широкий explicit-запрос.
+    # Последний fallback — широкий SAFE-запрос.
     try:
         print(
             "[Danbooru Games] "
-            "Пробуем общий explicit fallback"
+            "Пробуем общий SAFE fallback"
         )
 
         result = get_random_danbooru(
-            "rating:explicit",
+            "rating:safe",
             "Danbooru Games",
         )
 
@@ -507,7 +560,7 @@ def get_danbooru_games():
 
     raise RuntimeError(
         "Danbooru Games: "
-        "не удалось найти новый explicit пост"
+        "не удалось найти новый SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -544,9 +597,6 @@ def download_image(image_url):
         "Content-Length"
     )
 
-    # Сервер сообщил размер файла.
-    # Не блокируем загрузку, даже если файл больше 8 MB,
-    # потому что его нужно попробовать сжать.
     if content_length:
         try:
             size_mb = (
@@ -588,11 +638,11 @@ def download_image(image_url):
     )
 
     # =====================================================
-    # FILE ALREADY SMALL ENOUGH
+    # FILE <= 8 MB
     # =====================================================
 
     # ВАЖНО:
-    # Если GIF уже <= 8 MB, отправляем его оригинальным.
+    # Если GIF <= 8 MB, он отправляется без изменений.
     # Анимация полностью сохраняется.
     if len(original_data) <= max_size:
         content_type_lower = (
@@ -621,7 +671,7 @@ def download_image(image_url):
 
         print(
             "[Download] "
-            "Файл меньше 8 MB."
+            "Файл меньше или равен 8 MB."
         )
 
         print(
@@ -668,11 +718,10 @@ def download_image(image_url):
         # ANIMATION
         # =================================================
 
-        # Если GIF/APNG анимированный и больше 8 MB,
-        # берём первый кадр.
+        # GIF/APNG больше 8 MB:
+        # используем первый кадр.
         #
-        # Если GIF <= 8 MB, до этого места код вообще
-        # не дойдёт, поэтому его анимация сохраняется.
+        # GIF <= 8 MB сюда вообще не попадёт.
         if getattr(
             image,
             "is_animated",
@@ -696,10 +745,9 @@ def download_image(image_url):
             image.seek(0)
 
         # =================================================
-        # PREPARE IMAGE FOR JPEG
+        # PREPARE FOR JPEG
         # =================================================
 
-        # Для JPEG нужен RGB.
         if image.mode in (
             "RGBA",
             "LA",
@@ -916,6 +964,20 @@ def send_to_discord(image):
     source = image["source"]
     image_url = image["url"]
 
+    tags = image.get(
+        "tags"
+    )
+
+    post_id = image.get(
+        "post_id"
+    )
+
+    if not tags:
+        tags = "—"
+
+    if post_id is None:
+        post_id = "—"
+
     webhook_map = {
         "Waifu.im": (
             WAIFU_WEBHOOK_URL,
@@ -949,6 +1011,34 @@ def send_to_discord(image):
             "не настроен"
         )
 
+    # =====================================================
+    # SOURCE INFO
+    # =====================================================
+
+    print(
+        "[Discord] "
+        f"Источник: {source}"
+    )
+
+    print(
+        "[Discord] "
+        f"Тег: {tags}"
+    )
+
+    print(
+        "[Discord] "
+        f"ID поста: {post_id}"
+    )
+
+    print(
+        "[Discord] "
+        f"URL: {image_url}"
+    )
+
+    # =====================================================
+    # DOWNLOAD
+    # =====================================================
+
     (
         filename,
         image_data,
@@ -958,13 +1048,8 @@ def send_to_discord(image):
     )
 
     print(
-        f"[Discord] Отправка: "
-        f"{source}"
-    )
-
-    print(
-        f"[Discord] Файл: "
-        f"{filename}"
+        "[Discord] "
+        f"Файл: {filename}"
     )
 
     print(
@@ -972,13 +1057,21 @@ def send_to_discord(image):
         f"{len(image_data) / 1024 / 1024:.2f} MB"
     )
 
+    # =====================================================
+    # DISCORD MESSAGE
+    # =====================================================
+
+    message_content = (
+        f"{message}\n"
+        f"Источник: {source}\n"
+        f"Тег: {tags}\n"
+        f"ID поста: {post_id}"
+    )
+
     response = requests.post(
         webhook_url,
         data={
-            "content": (
-                f"{message}\n"
-                f"Источник: {source}"
-            )
+            "content": message_content
         },
         files={
             "file": (
@@ -1024,6 +1117,29 @@ def publish_source(
 ):
     try:
         image = getter()
+
+        print(
+            "-------------------------------------------------------"
+        )
+
+        print(
+            f"[{name}] "
+            f"Источник: {image.get('source')}"
+        )
+
+        print(
+            f"[{name}] "
+            f"Тег: {image.get('tags') or '—'}"
+        )
+
+        print(
+            f"[{name}] "
+            f"ID поста: {image.get('post_id') or '—'}"
+        )
+
+        print(
+            "-------------------------------------------------------"
+        )
 
         send_to_discord(image)
 
