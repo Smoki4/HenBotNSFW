@@ -2,7 +2,7 @@ import os
 import random
 import threading
 import time
-import hashlib
+import xml.etree.ElementTree as ET
 
 import requests
 from flask import Flask, Response
@@ -17,15 +17,18 @@ app = Flask(__name__)
 
 WAIFU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_WAIFU")
 DANBOORU_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_DANBOORU")
-RULE34_GAMES_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_RULE34_GAMES")
+RULE34_GAMES_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_RULE34_GAMES"
+)
 PEXELS_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_PEXELS")
 
 DANBOORU_USERNAME = os.environ.get("DANBOORU_USERNAME")
 DANBOORU_API_KEY = os.environ.get("DANBOORU_API_KEY")
+
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
+RULE34_USERNAME = os.environ.get("RULE34_USERNAME")
 RULE34_API_KEY = os.environ.get("RULE34_API_KEY")
-RULE34_USER_ID = os.environ.get("RULE34_USER_ID")
 
 
 # =========================================================
@@ -38,17 +41,17 @@ RULE34_API = "https://api.rule34.xxx/index.php"
 
 
 # =========================================================
-# SETTINGS
+# RULE34
+# =========================================================
+#
+# SAFE ONLY.
+# Explicit content is intentionally excluded.
+# furry добавлен в список тегов.
 # =========================================================
 
-MAX_DISCORD_FILE_SIZE = 8 * 1024 * 1024
-
-# Только безопасный рейтинг.
 RULE34_RATING = "rating:explicit"
 
-
 RULE34_GAME_TAGS = [
-    "furry",
     "genshin_impact",
     "nier_automata",
     "street_fighter",
@@ -100,6 +103,9 @@ RULE34_GAME_TAGS = [
     "tekken",
     "soul_calibur",
     "guilty_gear",
+    "furry",
+   "risk of rain2",
+    
 ]
 
 
@@ -121,7 +127,7 @@ DANBOORU_HEADERS = {
 
 RULE34_HEADERS = {
     "User-Agent": "GamePoster/1.0",
-    "Accept": "application/json, application/xml, text/xml, */*",
+    "Accept": "application/json, application/xml, text/xml, text/plain, */*",
 }
 
 
@@ -129,33 +135,35 @@ RULE34_HEADERS = {
 # MEMORY
 # =========================================================
 
-USED_LOCK = threading.Lock()
+RULE34_USED_IDS = set()
+DANBOORU_USED_IDS = set()
 
-DANBOORU_USED = set()
-RULE34_USED = set()
+RULE34_LOCK = threading.Lock()
+DANBOORU_MEMORY_LOCK = threading.Lock()
 
 MAX_MEMORY = 1000
 
 
-def remember_item(storage, value):
-    if value is None:
+def remember_id(memory_set, lock, post_id):
+    if post_id is None:
         return
 
-    value = str(value)
+    post_id = str(post_id)
 
-    with USED_LOCK:
-        storage.add(value)
+    with lock:
+        memory_set.add(post_id)
 
-        while len(storage) > MAX_MEMORY:
-            storage.pop()
+        while len(memory_set) > MAX_MEMORY:
+            old_id = random.choice(list(memory_set))
+            memory_set.discard(old_id)
 
 
-def was_used(storage, value):
-    if value is None:
+def was_used(memory_set, lock, post_id):
+    if post_id is None:
         return False
 
-    with USED_LOCK:
-        return str(value) in storage
+    with lock:
+        return str(post_id) in memory_set
 
 
 # =========================================================
@@ -172,6 +180,7 @@ def danbooru_wait():
     with DANBOORU_LOCK:
         now = time.monotonic()
         elapsed = now - LAST_DANBOORU_REQUEST
+
         wait_time = 1.2 - elapsed
 
         if wait_time > 0:
@@ -181,7 +190,7 @@ def danbooru_wait():
 
 
 # =========================================================
-# WAIFU
+# WAIFU.IM
 # =========================================================
 
 def get_random_waifu():
@@ -225,7 +234,7 @@ def get_random_waifu():
             )
 
     raise RuntimeError(
-        "Waifu.im: изображение не найдено"
+        "Waifu.im: не удалось получить изображение"
     )
 
 
@@ -235,19 +244,25 @@ def get_random_waifu():
 
 def get_random_danbooru(tags, source_name):
     if not DANBOORU_USERNAME:
-        raise RuntimeError("DANBOORU_USERNAME не настроен")
+        raise RuntimeError(
+            "DANBOORU_USERNAME не настроен"
+        )
 
     if not DANBOORU_API_KEY:
-        raise RuntimeError("DANBOORU_API_KEY не настроен")
+        raise RuntimeError(
+            "DANBOORU_API_KEY не настроен"
+        )
 
-    print(f"[{source_name}] Запрос: {tags}")
+    print(
+        f"[{source_name}] Запрос: {tags}"
+    )
 
     danbooru_wait()
 
     response = requests.get(
         f"{DANBOORU_API}/posts.json",
         params={
-            "limit": 50,
+            "limit": 100,
             "tags": tags,
         },
         auth=(
@@ -277,7 +292,11 @@ def get_random_danbooru(tags, source_name):
     for post in data:
         post_id = post.get("id")
 
-        if was_used(DANBOORU_USED, post_id):
+        if was_used(
+            DANBOORU_USED_IDS,
+            DANBOORU_MEMORY_LOCK,
+            post_id,
+        ):
             continue
 
         image_url = (
@@ -288,11 +307,13 @@ def get_random_danbooru(tags, source_name):
         if not image_url:
             continue
 
-        candidates.append({
-            "url": image_url,
-            "source": source_name,
-            "post_id": post_id,
-        })
+        candidates.append(
+            {
+                "url": image_url,
+                "source": source_name,
+                "post_id": post_id,
+            }
+        )
 
     if not candidates:
         raise RuntimeError(
@@ -302,8 +323,9 @@ def get_random_danbooru(tags, source_name):
 
     selected = random.choice(candidates)
 
-    remember_item(
-        DANBOORU_USED,
+    remember_id(
+        DANBOORU_USED_IDS,
+        DANBOORU_MEMORY_LOCK,
         selected.get("post_id"),
     )
 
@@ -321,12 +343,24 @@ def get_danbooru_anime():
         "rating:explicit fantasy",
         "rating:explicit school_uniform",
         "rating:explicit animal_ears",
+         "rating:explicit bleach",
+         "rating:explicit yani neko",
+         "rating:explicit furry",
+         "rating:explicit fnaf",
+         "rating:explicit re:zero",
         "rating:explicit hentai",
-        "rating:explicit lesbian",
-        "rating:explicit futanari",
-        "rating:explicit bleach",
-        "rating:explicit re:zero",
-        "rating:explicit yani neko",
+        "rating:explicit Don’t Toy With Me Miss Nagatoro",
+         "rating:explicit vocaloids"
+         "rating:explicit teto"
+          "rating:explicit miku"
+           "rating:explicit neru"
+         "rating:explicit games"
+         "rating:explicit risk of rain2"
+         "rating:explicit dead by daylight"
+          "rating:explicit pubg"
+          "rating:explicit dota2"
+          "rating:explicit zenless zone zero"
+           "rating:explicit Genshin impact"
     ])
 
     return get_random_danbooru(
@@ -344,6 +378,10 @@ def parse_rule34_response(response):
     if not text:
         return []
 
+    # -----------------------------------------------------
+    # JSON
+    # -----------------------------------------------------
+
     try:
         data = response.json()
 
@@ -351,37 +389,48 @@ def parse_rule34_response(response):
             return data
 
         if isinstance(data, dict):
-            for key in ("posts", "items", "data"):
+            for key in (
+                "posts",
+                "items",
+                "data",
+            ):
                 value = data.get(key)
 
                 if isinstance(value, list):
                     return value
 
-        # API иногда возвращает строку с ошибкой.
-        if isinstance(data, str):
-            print(
-                "[Rule34 Games] API:",
-                data[:500],
-            )
-
-            return []
-
     except ValueError:
         pass
 
-    content_type = response.headers.get(
-        "Content-Type",
-        "",
-    ).lower()
+    # -----------------------------------------------------
+    # JSON STRING ERROR
+    # -----------------------------------------------------
 
     if (
-        "xml" in content_type
+        "missing authentication" in text.lower()
+        or "authentication" in text.lower()
+        or "invalid" in text.lower()
+    ):
+        print(
+            "[Rule34 Games] API вернул "
+            "ошибку authentication."
+        )
+
+        return []
+
+    # -----------------------------------------------------
+    # XML
+    # -----------------------------------------------------
+
+    if (
+        "xml" in response.headers.get(
+            "Content-Type",
+            "",
+        ).lower()
         or text.startswith("<?xml")
-        or "<posts" in text
+        or "<posts" in text.lower()
     ):
         try:
-            import xml.etree.ElementTree as ET
-
             root = ET.fromstring(text)
 
             posts = []
@@ -394,39 +443,54 @@ def parse_rule34_response(response):
 
         except Exception as error:
             print(
-                "[Rule34 Games] XML error:",
-                error,
+                f"[Rule34 Games] XML error: {error}"
             )
 
     print(
-        "[Rule34 Games] Не удалось распознать ответ."
-    )
-    print(
-        "[Rule34 Games] Content-Type:",
-        content_type,
-    )
-    print(
-        "[Rule34 Games] Ответ:",
-        text[:500],
+        "[Rule34 Games] "
+        f"Неизвестный ответ: {text[:500]}"
     )
 
     return []
 
 
 # =========================================================
-# RULE34
+# RULE34 AUTH
+# =========================================================
+
+def rule34_auth_available():
+    return bool(
+        RULE34_USERNAME
+        and RULE34_API_KEY
+    )
+
+
+def rule34_params():
+    params = {
+        "page": "dapi",
+        "s": "post",
+        "q": "index",
+        "json": "1",
+    }
+
+    if RULE34_USERNAME:
+        params["user_id"] = RULE34_USERNAME
+
+    if RULE34_API_KEY:
+        params["api_key"] = RULE34_API_KEY
+
+    return params
+
+
+# =========================================================
+# RULE34 GAMES
 # =========================================================
 
 def get_rule34_games():
     print(
         "[Rule34 Games] "
-        "Ищем safe игровой арт..."
+        "Ищем SAFE игровой арт..."
     )
-
-    if not RULE34_API_KEY or not RULE34_USER_ID:
-        raise RuntimeError(
-            "RULE34_API_KEY или RULE34_USER_ID не настроен"
-        )
 
     games = RULE34_GAME_TAGS.copy()
     random.shuffle(games)
@@ -437,19 +501,14 @@ def get_rule34_games():
             f"Пробуем тег: {game_tag}"
         )
 
-        params = {
-            "page": "dapi",
-            "s": "post",
-            "q": "index",
-            "json": "1",
-            "tags": (
-                f"{game_tag} "
-                f"{RULE34_RATING}"
-            ),
-            "limit": "100",
-            "api_key": RULE34_API_KEY,
-            "user_id": RULE34_USER_ID,
-        }
+        params = rule34_params()
+
+        params["tags"] = (
+            f"{game_tag} "
+            f"{RULE34_RATING}"
+        )
+
+        params["limit"] = "100"
 
         try:
             response = requests.get(
@@ -460,8 +519,8 @@ def get_rule34_games():
             )
 
             print(
-                "[Rule34 Games] HTTP:",
-                response.status_code,
+                "[Rule34 Games] HTTP: "
+                f"{response.status_code}"
             )
 
             response.raise_for_status()
@@ -472,8 +531,8 @@ def get_rule34_games():
 
         except Exception as error:
             print(
-                "[Rule34 Games] Ошибка API:",
-                error,
+                "[Rule34 Games] "
+                f"Ошибка API: {error}"
             )
             continue
 
@@ -490,7 +549,8 @@ def get_rule34_games():
             post_id = post.get("id")
 
             if was_used(
-                RULE34_USED,
+                RULE34_USED_IDS,
+                RULE34_LOCK,
                 post_id,
             ):
                 continue
@@ -518,8 +578,9 @@ def get_rule34_games():
             ):
                 continue
 
-            remember_item(
-                RULE34_USED,
+            remember_id(
+                RULE34_USED_IDS,
+                RULE34_LOCK,
                 post_id,
             )
 
@@ -542,7 +603,8 @@ def get_rule34_games():
 
     raise RuntimeError(
         "Rule34 Games: "
-        "не удалось найти подходящий safe игровой пост"
+        "не удалось найти подходящий "
+        "SAFE игровой пост"
     )
 
 
@@ -555,6 +617,10 @@ def get_random_pexels():
         raise RuntimeError(
             "PEXELS_API_KEY не настроен"
         )
+
+    print(
+        "[Pexels] Получаем изображение..."
+    )
 
     queries = [
         "gaming",
@@ -587,14 +653,19 @@ def get_random_pexels():
             )
 
             if response.status_code == 429:
-                raise RuntimeError(
-                    "Pexels HTTP 429"
+                print(
+                    "[Pexels] HTTP 429"
                 )
+                continue
 
             response.raise_for_status()
 
             data = response.json()
-            photos = data.get("photos", [])
+
+            photos = data.get(
+                "photos",
+                [],
+            )
 
             if not photos:
                 continue
@@ -602,7 +673,10 @@ def get_random_pexels():
             random.shuffle(photos)
 
             for photo in photos:
-                src = photo.get("src", {})
+                src = photo.get(
+                    "src",
+                    {},
+                )
 
                 image_url = (
                     src.get("large2x")
@@ -618,12 +692,12 @@ def get_random_pexels():
 
         except Exception as error:
             print(
-                "[Pexels] Ошибка:",
-                error,
+                f"[Pexels] Ошибка: {error}"
             )
 
     raise RuntimeError(
-        "Pexels: изображение не найдено"
+        "Pexels: "
+        "не удалось получить изображение"
     )
 
 
@@ -632,6 +706,8 @@ def get_random_pexels():
 # =========================================================
 
 def download_image(image_url):
+    max_size = 8 * 1024 * 1024
+
     response = requests.get(
         image_url,
         headers=DEFAULT_HEADERS,
@@ -652,7 +728,7 @@ def download_image(image_url):
 
     if content_length:
         try:
-            if int(content_length) > MAX_DISCORD_FILE_SIZE:
+            if int(content_length) > max_size:
                 response.close()
 
                 raise RuntimeError(
@@ -674,7 +750,7 @@ def download_image(image_url):
 
             total += len(chunk)
 
-            if total > MAX_DISCORD_FILE_SIZE:
+            if total > max_size:
                 raise RuntimeError(
                     "Изображение больше 8 MB"
                 )
@@ -686,17 +762,29 @@ def download_image(image_url):
 
     content = b"".join(chunks)
 
-    if "png" in content_type:
+    content_type_lower = (
+        content_type.lower()
+    )
+
+    if "png" in content_type_lower:
         extension = "png"
-    elif "webp" in content_type:
+
+    elif "webp" in content_type_lower:
         extension = "webp"
-    elif "gif" in content_type:
+
+    elif "gif" in content_type_lower:
         extension = "gif"
+
+    elif "jpeg" in content_type_lower:
+        extension = "jpg"
+
     else:
         extension = "jpg"
 
+    filename = f"image.{extension}"
+
     return (
-        f"image.{extension}",
+        filename,
         content,
         content_type,
     )
@@ -734,11 +822,14 @@ def send_to_discord(image):
             f"Неизвестный источник: {source}"
         )
 
-    webhook_url, message = webhook_map[source]
+    webhook_url, message = (
+        webhook_map[source]
+    )
 
     if not webhook_url:
         raise RuntimeError(
-            f"Webhook для {source} не настроен"
+            f"Webhook для {source} "
+            "не настроен"
         )
 
     filename, image_data, content_type = (
@@ -754,7 +845,7 @@ def send_to_discord(image):
     )
 
     print(
-        f"[Discord] Размер: "
+        "[Discord] Размер: "
         f"{len(image_data) / 1024 / 1024:.2f} MB"
     )
 
@@ -777,14 +868,14 @@ def send_to_discord(image):
     )
 
     print(
-        f"[Discord] HTTP: "
+        "[Discord] HTTP: "
         f"{response.status_code}"
     )
 
     if not response.ok:
         print(
-            "[Discord] Ответ:",
-            response.text[:1000],
+            "[Discord] Ответ: "
+            f"{response.text[:1000]}"
         )
 
         raise RuntimeError(
@@ -799,32 +890,6 @@ def send_to_discord(image):
     )
 
 
-    files={
-        "file": (
-            filename,
-            image_data,
-            content_type,
-        )
-    },
-    timeout=45,
-)
-
-print(
-    f"[Discord] HTTP: {response.status_code}"
-)
-
-if not response.ok:
-    print(
-        "[Discord] Ответ:",
-        response.text[:1000]
-    )
-
-    raise RuntimeError(
-        f"Discord HTTP {response.status_code}: "
-        f"{response.text[:500]}"
-    )
-
-
 # =========================================================
 # PUBLISH
 # =========================================================
@@ -836,7 +901,8 @@ def publish_source(name, getter):
         send_to_discord(image)
 
         print(
-            f"[{name}] Успешно опубликовано"
+            f"[{name}] "
+            "Успешно опубликовано"
         )
 
         return {
@@ -847,7 +913,8 @@ def publish_source(name, getter):
 
     except Exception as error:
         print(
-            f"[{name}] ОШИБКА: {error}"
+            f"[{name}] "
+            f"ОШИБКА: {error}"
         )
 
         return {
@@ -863,15 +930,26 @@ def publish_source(name, getter):
 
 @app.route("/post")
 def post_image():
-    print("=" * 55)
-    print("POST: запуск публикации")
-    print("=" * 55)
+    print(
+        "======================================================="
+    )
+
+    print(
+        "POST: запуск публикации"
+    )
+
+    print(
+        "======================================================="
+    )
 
     sources = []
 
     if WAIFU_WEBHOOK_URL:
         sources.append(
-            ("Waifu.im", get_random_waifu)
+            (
+                "Waifu.im",
+                get_random_waifu,
+            )
         )
 
     if (
@@ -886,11 +964,7 @@ def post_image():
             )
         )
 
-    if (
-        RULE34_GAMES_WEBHOOK_URL
-        and RULE34_API_KEY
-        and RULE34_USER_ID
-    ):
+    if RULE34_GAMES_WEBHOOK_URL:
         sources.append(
             (
                 "Rule34 Games",
@@ -917,15 +991,13 @@ def post_image():
 
     results = []
 
-    # Каждый источник запускается отдельно.
-    # Ошибка Rule34 не мешает остальным.
     for name, getter in sources:
-        result = publish_source(
-            name,
-            getter,
+        results.append(
+            publish_source(
+                name,
+                getter,
+            )
         )
-
-        results.append(result)
 
     successful = sum(
         1
@@ -935,20 +1007,37 @@ def post_image():
 
     errors = len(results) - successful
 
-    print("=" * 55)
-    print("POST: публикация завершена")
-    print(f"POST: успешно: {successful}")
-    print(f"POST: ошибок: {errors}")
+    print(
+        "======================================================="
+    )
+
+    print(
+        "POST: публикация завершена"
+    )
+
+    print(
+        f"POST: успешно: {successful}"
+    )
+
+    print(
+        f"POST: ошибок: {errors}"
+    )
 
     for result in results:
         if not result["success"]:
             print(
-                f"POST: {result['source']}: "
+                f"POST: "
+                f"{result['source']}: "
                 f"{result['error']}"
             )
 
-    print("=" * 55)
+    print(
+        "======================================================="
+    )
 
+    # Даже если один источник временно упал,
+    # /post возвращает 200, чтобы остальные
+    # источники считались успешно обработанными.
     return Response(
         f"OK - successful: "
         f"{successful}, errors: {errors}",
@@ -978,8 +1067,6 @@ def status():
 
             "rule34_games": bool(
                 RULE34_GAMES_WEBHOOK_URL
-                and RULE34_API_KEY
-                and RULE34_USER_ID
             ),
 
             "pexels": bool(
@@ -988,19 +1075,15 @@ def status():
             ),
         },
 
-        "rule34_rating": RULE34_RATING,
-
-        "rule34_tags": len(
-            RULE34_GAME_TAGS
-        ),
-
-        "danbooru_memory": len(
-            DANBOORU_USED
-        ),
-
-        "rule34_memory": len(
-            RULE34_USED
-        ),
+        "rule34": {
+            "configured": bool(
+                RULE34_GAMES_WEBHOOK_URL
+            ),
+            "auth_configured": (
+                rule34_auth_available()
+            ),
+            "rating": RULE34_RATING,
+        },
     }
 
 
@@ -1043,5 +1126,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port,
-    )
-
+    ) 
