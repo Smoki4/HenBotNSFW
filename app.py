@@ -440,45 +440,181 @@ def get_danbooru_anime():
     )
 
 
-# =========================================================
-# DANBOORU GAMES
-# =========================================================
-
 DANBOORU_GAME_TAGS = [
+    # Genshin / HoYoverse
     "rating:explicit genshin_impact",
     "rating:explicit honkai:_star_rail",
+    "rating:explicit honkai_impact_3rd",
     "rating:explicit zenless_zone_zero",
+    "rating:explicit tears_of_themis",
+
+    # Popular live-service
+    "rating:explicit wuthering_waves",
+    "rating:explicit arknights",
+    "rating:explicit blue_archive",
+    "rating:explicit azur_lane",
+    "rating:explicit girls_frontline",
+    "rating:explicit nikke",
+    "rating:explicit path_to_nowhere",
+    "rating:explicit punishing:_gray_raven",
+    "rating:explicit neural_cloud",
+
+    # MOBA / competitive
     "rating:explicit league_of_legends",
+    "rating:explicit dota_2",
     "rating:explicit overwatch",
     "rating:explicit valorant",
     "rating:explicit apex_legends",
-    "rating:explicit fortnite",
-    "rating:explicit minecraft",
-    "rating:explicit pokemon",
+    "rating:explicit paladins",
+    "rating:explicit smite",
+
+    # Fighting
+    "rating:explicit tekken",
+    "rating:explicit street_fighter",
+    "rating:explicit guilty_gear",
+    "rating:explicit mortal_kombat",
+    "rating:explicit soulcalibur",
+    "rating:explicit the_king_of_fighters",
+    "rating:explicit dead_or_alive",
+    "rating:explicit blazblue",
+    "rating:explicit skullgirls",
+
+    # JRPG / RPG
     "rating:explicit final_fantasy",
-    "rating:explicit resident_evil",
+    "rating:explicit final_fantasy_vii",
+    "rating:explicit final_fantasy_xiv",
+    "rating:explicit persona",
+    "rating:explicit persona_5",
+    "rating:explicit shin_megami_tensei",
+    "rating:explicit fire_emblem",
+    "rating:explicit dragon_quest",
+    "rating:explicit tales_of_series",
     "rating:explicit nier_automata",
-    "rating:explicit cyberpunk_2077",
-    "rating:explicit the_witcher",
-    "rating:explicit baldurs_gate_3",
+    "rating:explicit nier_replicant",
+    "rating:explicit kingdom_hearts",
+    "rating:explicit xenoblade_chronicles",
+
+    # Dark / Action RPG
     "rating:explicit elden_ring",
     "rating:explicit dark_souls",
+    "rating:explicit bloodborne",
+    "rating:explicit sekiro",
+    "rating:explicit demon's_souls",
+    "rating:explicit monster_hunter",
     "rating:explicit devil_may_cry",
-    "rating:explicit guilty_gear",
-    "rating:explicit street_fighter",
-    "rating:explicit mortal_kombat",
-    "rating:explicit tekken",
-    "rating:explicit persona",
-    "rating:explicit dota_2",
-    "rating:explicit dead_by_daylight",
-    "rating:explicit risk_of_rain_2",
-    "rating:explicit fnaf",
-    "rating:explicit portal",
-    "rating:explicit halo",
-    "rating:explicit fallout",
-    "rating:explicit furry game_character",
-]
+    "rating:explicit bayonetta",
 
+    # Horror
+    "rating:explicit resident_evil",
+    "rating:explicit resident_evil_2",
+    "rating:explicit resident_evil_3",
+    "rating:explicit resident_evil_4",
+    "rating:explicit resident_evil_5",
+    "rating:explicit resident_evil_6",
+    "rating:explicit resident_evil_7",
+    "rating:explicit resident_evil_village",
+    "rating:explicit silent_hill",
+    "rating:explicit dead_by_daylight",
+    "rating:explicit five_nights_at_freddy's",
+    "rating:explicit amnesia",
+    "rating:explicit little_nightmares",
+
+    # Western RPG
+    "rating:explicit the_witcher",
+    "rating:explicit the_witcher_3",
+    "rating:explicit cyberpunk_2077",
+    "rating:explicit baldurs_gate_3",
+    "rating:explicit dragon_age",
+    "rating:explicit mass_effect",
+    "rating:explicit fallout",
+    "rating:explicit elder_scrolls",
+    "rating:explicit skyrim",
+    "rating:explicit starfield",
+
+    # Shooter
+    "rating:explicit call_of_duty",
+    "rating:explicit battlefield",
+    "rating:explicit halo",
+    "rating:explicit doom",
+    "rating:explicit quake",
+    "rating:explicit titanfall",
+    "rating:explicit borderlands",
+    "rating:explicit destiny",
+    "rating:explicit destiny_2",
+    "rating:explicit warframe",
+
+    # Nintendo
+    "rating:explicit pokemon",
+    "rating:explicit pokemon_scarlet",
+    "rating:explicit pokemon_violet",
+    "rating:explicit the_legend_of_zelda",
+    "rating:explicit super_mario",
+    "rating:explicit mario_kart",
+    "rating:explicit fire_emblem",
+    "rating:explicit splatoon",
+    "rating:explicit animal_crossing",
+    "rating:explicit kirby",
+    "rating:explicit metroid",
+
+    # Minecraft / sandbox
+    "rating:explicit minecraft",
+    "rating:explicit terraria",
+    "rating:explicit stardew_valley",
+    "rating:explicit dont_starve",
+    "rating:explicit sims",
+    "rating:explicit the_sims_4",
+
+    # Anime games
+    "rating:explicit fate_grand_order",
+    "rating:explicit fate_stay_night",
+    "rating:explicit fate_extra",
+    "rating:explicit granblue_fantasy",
+    "rating:explicit princess_connect",
+    "rating:explicit uma_musume",
+    "rating:explicit project_sekai",
+    "rating:explicit bang_dream",
+    "rating:explicit love_live",
+    "rating:explicit d4dj",
+
+    # Fighting / Anime
+    "rating:explicit dragon_ball",
+    "rating:explicit dragon_ball_fighterz",
+    "rating:explicit naruto",
+    "rating:explicit one_piece",
+    "rating:explicit bleach",
+    "rating:explicit my_hero_academia",
+    "rating:explicit jojo_no_kimyou_na_bouken",
+
+    # Valve
+    "rating:explicit portal",
+    "rating:explicit portal_2",
+    "rating:explicit half-life",
+    "rating:explicit team_fortress_2",
+    "rating:explicit left_4_dead",
+    "rating:explicit counter-strike",
+
+    # Ubisoft
+    "rating:explicit assassins_creed",
+    "rating:explicit far_cry",
+    "rating:explicit watch_dogs",
+    "rating:explicit rainbow_six",
+
+    # Other popular games
+    "rating:explicit fortnite",
+    "rating:explicit roblox",
+    "rating:explicit overwatch_2",
+    "rating:explicit palworld",
+    "rating:explicit lethal_company",
+    "rating:explicit phasmophobia",
+    "rating:explicit lethal_company",
+    "rating:explicit hollow_knight",
+    "rating:explicit hades",
+    "rating:explicit hades_ii",
+    "rating:explicit celeste",
+    "rating:explicit undertale",
+    "rating:explicit deltarune",
+    "rating:explicit omori",
+]
 
 def get_danbooru_games():
     tags_list = (
