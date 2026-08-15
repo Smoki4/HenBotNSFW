@@ -41,8 +41,6 @@ DANBOORU_API_KEY = os.environ.get(
 
 MAX_FILE_SIZE = 8 * 1024 * 1024
 
-# Сколько разных Danbooru Games постов
-# пробовать при ошибке Discord 20009.
 MAX_DISCORD_RETRIES = 5
 
 
@@ -405,10 +403,6 @@ def get_danbooru_anime():
 
             continue
 
-    # =====================================================
-    # EXPLICIT FALLBACK
-    # =====================================================
-
     try:
         print(
             "[Danbooru Anime] "
@@ -528,10 +522,6 @@ def get_danbooru_games():
 
             continue
 
-    # =====================================================
-    # EXPLICIT FALLBACK
-    # =====================================================
-
     try:
         print(
             "[Danbooru Games] "
@@ -589,35 +579,11 @@ def download_image(image_url):
     content_type = (
         response.headers.get(
             "Content-Type",
-            "image/jpeg",
-        )
+            "",
+        ).lower()
     )
-
-    content_length = (
-        response.headers.get(
-            "Content-Length"
-        )
-    )
-
-    if content_length:
-        try:
-            size_mb = (
-                int(content_length)
-                / 1024
-                / 1024
-            )
-
-            print(
-                "[Download] "
-                "Размер исходника: "
-                f"{size_mb:.2f} MB"
-            )
-
-        except ValueError:
-            pass
 
     chunks = []
-
     total = 0
 
     try:
@@ -634,52 +600,97 @@ def download_image(image_url):
     finally:
         response.close()
 
-    original_data = (
-        b"".join(chunks)
+    original_data = b"".join(
+        chunks
     )
+
+    if not original_data:
+        raise RuntimeError(
+            "Сервер вернул пустой файл"
+        )
 
     print(
         "[Download] Получено: "
         f"{len(original_data) / 1024 / 1024:.2f} MB"
     )
 
+    print(
+        "[Download] Content-Type: "
+        f"{content_type or 'не указан'}"
+    )
+
     # =====================================================
-    # FILE <= 8 MB
+    # <= 8 MB
     # =====================================================
 
     if len(original_data) <= MAX_FILE_SIZE:
-        content_type_lower = (
-            content_type.lower()
+        try:
+            test_image = Image.open(
+                BytesIO(original_data)
+            )
+
+            test_image.verify()
+
+        except Exception as error:
+            raise RuntimeError(
+                "Скачанный файл не является "
+                "корректным изображением: "
+                f"{error}"
+            )
+
+        try:
+            test_image = Image.open(
+                BytesIO(original_data)
+            )
+
+            detected_format = (
+                test_image.format
+            )
+
+        except Exception as error:
+            raise RuntimeError(
+                "Не удалось определить "
+                f"формат изображения: {error}"
+            )
+
+        print(
+            "[Download] "
+            "Определённый формат: "
+            f"{detected_format}"
         )
 
-        if "png" in content_type_lower:
+        if detected_format == "PNG":
             extension = "png"
+            output_type = "image/png"
 
-        elif "webp" in content_type_lower:
+        elif detected_format == "WEBP":
             extension = "webp"
+            output_type = "image/webp"
 
-        elif "gif" in content_type_lower:
+        elif detected_format == "GIF":
             extension = "gif"
+            output_type = "image/gif"
 
-        elif (
-            "jpeg" in content_type_lower
-            or "jpg" in content_type_lower
+        elif detected_format in (
+            "JPEG",
+            "JPG",
         ):
             extension = "jpg"
+            output_type = "image/jpeg"
 
         else:
             extension = "jpg"
-
-        filename = (
-            f"image.{extension}"
-        )
+            output_type = (
+                content_type
+                or "image/jpeg"
+            )
 
         print(
             "[Download] "
             "Файл подходит по размеру."
         )
 
-        if extension == "gif":
+        if detected_format == "GIF":
             print(
                 "[Download] "
                 "GIF отправляется "
@@ -687,13 +698,13 @@ def download_image(image_url):
             )
 
         return (
-            filename,
+            f"image.{extension}",
             original_data,
-            content_type,
+            output_type,
         )
 
     # =====================================================
-    # FILE > 8 MB
+    # > 8 MB
     # =====================================================
 
     print(
@@ -703,7 +714,7 @@ def download_image(image_url):
 
     print(
         "[Download] "
-        "Начинаем сжатие..."
+        "Начинаем автоматическое сжатие..."
     )
 
     try:
@@ -711,6 +722,14 @@ def download_image(image_url):
             BytesIO(original_data)
         )
 
+    except Exception as error:
+        raise RuntimeError(
+            "Не удалось открыть скачанное "
+            "изображение для сжатия: "
+            f"{error}"
+        )
+
+    try:
         print(
             "[Download] Формат: "
             f"{image.format}"
@@ -737,13 +756,8 @@ def download_image(image_url):
 
             print(
                 "[Download] "
-                "Файл больше 8 MB."
-            )
-
-            print(
-                "[Download] "
-                "Для сжатия используется "
-                "первый кадр."
+                "Для файла больше 8 MB "
+                "используется первый кадр."
             )
 
             image.seek(0)
@@ -793,7 +807,7 @@ def download_image(image_url):
             )
 
         # =================================================
-        # QUALITY
+        # JPEG QUALITY
         # =================================================
 
         qualities = [
@@ -946,8 +960,8 @@ def download_image(image_url):
 
     except Exception as error:
         raise RuntimeError(
-            "Изображение больше 8 MB "
-            "и не удалось его сжать: "
+            "Ошибка обработки "
+            "изображения: "
             f"{error}"
         )
 
@@ -1043,10 +1057,6 @@ def send_to_discord(image):
             "не настроен"
         )
 
-    # =====================================================
-    # LOG
-    # =====================================================
-
     print(
         "[Discord] "
         f"Источник: {source}"
@@ -1126,10 +1136,6 @@ def send_to_discord(image):
             f"{error}"
         )
 
-    # =====================================================
-    # HTTP
-    # =====================================================
-
     print(
         "[Discord] HTTP: "
         f"{response.status_code}"
@@ -1143,21 +1149,6 @@ def send_to_discord(image):
         print(
             "[Discord] "
             "Успешно отправлено."
-        )
-
-        print(
-            "[Discord] "
-            f"Источник: {source}"
-        )
-
-        print(
-            "[Discord] "
-            f"Тег: {tags}"
-        )
-
-        print(
-            "[Discord] "
-            f"ID: {post_id}"
         )
 
         return
@@ -1192,10 +1183,6 @@ def send_to_discord(image):
         and discord_code == 20009
     ):
         print(
-            "======================================================="
-        )
-
-        print(
             "[Discord] "
             "ОШИБКА 20009"
         )
@@ -1221,16 +1208,12 @@ def send_to_discord(image):
             f"ID поста: {post_id}"
         )
 
-        print(
-            "======================================================="
-        )
-
         raise RuntimeError(
             "DISCORD_20009"
         )
 
     # =====================================================
-    # OTHER DISCORD ERROR
+    # OTHER
     # =====================================================
 
     print(
@@ -1312,7 +1295,7 @@ def publish_source(
 
 
 # =========================================================
-# PUBLISH DANBOORU GAMES WITH RETRIES
+# DANBOORU GAMES PUBLISH
 # =========================================================
 
 def publish_danbooru_games():
@@ -1323,12 +1306,6 @@ def publish_danbooru_games():
     print(
         "[Danbooru Games] "
         "Запуск публикации"
-    )
-
-    print(
-        f"[Danbooru Games] "
-        f"Максимум попыток: "
-        f"{MAX_DISCORD_RETRIES}"
     )
 
     last_error = None
@@ -1348,30 +1325,20 @@ def publish_danbooru_games():
         )
 
         try:
-            # Получаем новый пост.
             image = (
                 get_danbooru_games()
             )
 
             print(
                 "[Danbooru Games] "
-                f"Источник: "
-                f"{image.get('source')}"
+                f"Тег: {image.get('tags')}"
             )
 
             print(
                 "[Danbooru Games] "
-                f"Тег: "
-                f"{image.get('tags')}"
+                f"ID: {image.get('post_id')}"
             )
 
-            print(
-                "[Danbooru Games] "
-                f"ID: "
-                f"{image.get('post_id')}"
-            )
-
-            # Пытаемся отправить.
             send_to_discord(
                 image
             )
@@ -1407,7 +1374,33 @@ def publish_danbooru_games():
 
                 print(
                     "[Danbooru Games] "
-                    "Пост помечен как использованный."
+                    "Берём следующий пост..."
+                )
+
+                continue
+
+            # =================================================
+            # BAD IMAGE
+            # =================================================
+
+            if (
+                "не является" in error_text
+                or "Не удалось открыть" in error_text
+                or "пустой файл" in error_text
+                or "Не удалось определить" in error_text
+                or "Ошибка обработки" in error_text
+            ):
+                print(
+                    "[Danbooru Games] "
+                    "Файл поста повреждён, "
+                    "не поддерживается "
+                    "или не является "
+                    "изображением."
+                )
+
+                print(
+                    "[Danbooru Games] "
+                    "Пропускаем пост."
                 )
 
                 print(
@@ -1416,10 +1409,6 @@ def publish_danbooru_games():
                 )
 
                 continue
-
-            # =================================================
-            # OTHER ERROR
-            # =================================================
 
             print(
                 "[Danbooru Games] "
@@ -1441,8 +1430,8 @@ def publish_danbooru_games():
 
     print(
         "[Danbooru Games] "
-        "Не удалось опубликовать пост "
-        f"за {MAX_DISCORD_RETRIES} попыток."
+        "Не удалось опубликовать "
+        f"пост за {MAX_DISCORD_RETRIES} попыток."
     )
 
     return {
