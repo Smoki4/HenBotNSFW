@@ -1,3 +1,4 @@
+```python
 import os
 import random
 import threading
@@ -5,6 +6,7 @@ import time
 
 import requests
 from flask import Flask, Response
+
 
 app = Flask(__name__)
 
@@ -21,9 +23,15 @@ DANBOORU_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_DANBOORU"
 )
 
+# Старый webhook Rule34 Games сохраняем,
+# но теперь он используется для Danbooru Games.
 DANBOORU_GAMES_WEBHOOK_URL = (
-    os.environ.get("DISCORD_WEBHOOK_RULE34_GAMES")
-    or os.environ.get("DISCORD_WEBHOOK_DANBOORU_GAMES")
+    os.environ.get(
+        "DISCORD_WEBHOOK_RULE34_GAMES"
+    )
+    or os.environ.get(
+        "DISCORD_WEBHOOK_DANBOORU_GAMES"
+    )
 )
 
 DANBOORU_USERNAME = os.environ.get(
@@ -36,21 +44,72 @@ DANBOORU_API_KEY = os.environ.get(
 
 
 # =========================================================
-# SETTINGS
-# =========================================================
-
-MAX_FILE_SIZE = 8 * 1024 * 1024
-
-MAX_DISCORD_RETRIES = 5
-
-
-# =========================================================
 # API
 # =========================================================
 
 DANBOORU_API = (
     "https://danbooru.donmai.us"
 )
+
+
+# =========================================================
+# SETTINGS
+# =========================================================
+
+# Discord spoiler для всех изображений.
+DISCORD_IMAGE_SPOILER = True
+
+# Максимальный размер файла для Discord.
+MAX_IMAGE_SIZE = 8 * 1024 * 1024
+
+# Сколько запросов Danbooru максимум
+# пробовать перед fallback.
+DANBOORU_MAX_ATTEMPTS = 12
+
+
+# =========================================================
+# НЕЖЕЛАТЕЛЬНЫЕ ТЕГИ
+# =========================================================
+#
+# Здесь можно самому добавлять/удалять теги.
+#
+# В Danbooru перед тегом ставится "-",
+# поэтому:
+#
+# gore -> -gore
+# blood -> -blood
+#
+# Они автоматически добавляются ко всем
+# запросам Danbooru.
+# =========================================================
+
+DANBOORU_EXCLUDE_TAGS = [
+    "gore",
+    "blood",
+    "scat",
+    "feces",
+    "vomit",
+    "vore",
+]
+
+
+def get_exclude_tags():
+    result = []
+
+    for tag in DANBOORU_EXCLUDE_TAGS:
+        tag = str(tag).strip()
+
+        if not tag:
+            continue
+
+        if tag.startswith("-"):
+            result.append(tag)
+        else:
+            result.append(
+                f"-{tag}"
+            )
+
+    return result
 
 
 # =========================================================
@@ -63,6 +122,7 @@ DEFAULT_HEADERS = {
         "(compatible; GamePoster/1.0)"
     )
 }
+
 
 DANBOORU_HEADERS = {
     "User-Agent": (
@@ -135,17 +195,17 @@ def danbooru_wait():
         now = time.monotonic()
 
         elapsed = (
-            now
-            - LAST_DANBOORU_REQUEST
+            now - LAST_DANBOORU_REQUEST
         )
 
         wait_time = (
-            1.2
-            - elapsed
+            1.2 - elapsed
         )
 
         if wait_time > 0:
-            time.sleep(wait_time)
+            time.sleep(
+                wait_time
+            )
 
         LAST_DANBOORU_REQUEST = (
             time.monotonic()
@@ -194,16 +254,9 @@ def get_random_waifu():
             if not image_url:
                 continue
 
-            print(
-                "[Waifu.im] "
-                "Изображение найдено"
-            )
-
             return {
                 "url": image_url,
                 "source": "Waifu.im",
-                "tags": None,
-                "post_id": None,
             }
 
         except Exception as error:
@@ -239,14 +292,18 @@ def get_random_danbooru(
             "не настроен"
         )
 
-    print(
-        f"[{source_name}] "
-        f"Запрос: {tags}"
+    exclude_tags = (
+        get_exclude_tags()
     )
+
+    final_tags = (
+        f"{tags} "
+        f"{' '.join(exclude_tags)}"
+    ).strip()
 
     print(
         f"[{source_name}] "
-        f"Использованный тег: {tags}"
+        f"Запрос: {final_tags}"
     )
 
     danbooru_wait()
@@ -255,7 +312,7 @@ def get_random_danbooru(
         f"{DANBOORU_API}/posts.json",
         params={
             "limit": 100,
-            "tags": tags,
+            "tags": final_tags,
         },
         auth=(
             DANBOORU_USERNAME,
@@ -283,7 +340,9 @@ def get_random_danbooru(
     candidates = []
 
     for post in data:
-        post_id = post.get("id")
+        post_id = post.get(
+            "id"
+        )
 
         if was_used(
             DANBOORU_USED_IDS,
@@ -293,8 +352,12 @@ def get_random_danbooru(
             continue
 
         image_url = (
-            post.get("large_file_url")
-            or post.get("file_url")
+            post.get(
+                "large_file_url"
+            )
+            or post.get(
+                "file_url"
+            )
         )
 
         if not image_url:
@@ -305,7 +368,6 @@ def get_random_danbooru(
                 "url": image_url,
                 "source": source_name,
                 "post_id": post_id,
-                "tags": tags,
             }
         )
 
@@ -316,26 +378,8 @@ def get_random_danbooru(
             "не найдено"
         )
 
-    random.shuffle(candidates)
-
-    selected = candidates[0]
-
-    remember_id(
-        DANBOORU_USED_IDS,
-        DANBOORU_MEMORY_LOCK,
-        selected.get("post_id"),
-    )
-
-    print(
-        f"[{source_name}] "
-        f"Найден ID: "
-        f"{selected.get('post_id')}"
-    )
-
-    print(
-        f"[{source_name}] "
-        f"Тег: "
-        f"{selected.get('tags')}"
+    selected = random.choice(
+        candidates
     )
 
     return selected
@@ -346,190 +390,26 @@ def get_random_danbooru(
 # =========================================================
 
 DANBOORU_ANIME_TAGS = [
-    # =========================================================
-    # ОСНОВНЫЕ
-    # =========================================================
-
     "rating:explicit anime",
     "rating:explicit 1girl",
-    "rating:explicit 2girls",
     "rating:explicit 1boy",
-    "rating:explicit 2boys",
     "rating:explicit solo",
-    "rating:explicit portrait",
-    "rating:explicit upper_body",
-    "rating:explicit full_body",
-
-    # =========================================================
-    # ВОЛОСЫ
-    # =========================================================
-
-    "rating:explicit long_hair",
-    "rating:explicit short_hair",
-    "rating:explicit very_long_hair",
-    "rating:explicit twintails",
-    "rating:explicit ponytail",
-    "rating:explicit braid",
-    "rating:explicit hair_bow",
-    "rating:explicit black_hair",
-    "rating:explicit blonde_hair",
-    "rating:explicit white_hair",
-    "rating:explicit silver_hair",
-    "rating:explicit gray_hair",
-    "rating:explicit pink_hair",
-    "rating:explicit blue_hair",
-    "rating:explicit red_hair",
-    "rating:explicit purple_hair",
-    "rating:explicit green_hair",
-    "rating:explicit brown_hair",
-    "rating:explicit orange_hair",
-
-    # =========================================================
-    # ГЛАЗА
-    # =========================================================
-
-    "rating:explicit blue_eyes",
-    "rating:explicit red_eyes",
-    "rating:explicit green_eyes",
-    "rating:explicit yellow_eyes",
-    "rating:explicit purple_eyes",
-    "rating:explicit brown_eyes",
-    "rating:explicit heterochromia",
-
-    # =========================================================
-    # ОДЕЖДА
-    # =========================================================
-
-    "rating:explicit school_uniform",
-    "rating:explicit sailor_uniform",
-    "rating:explicit blazer",
-    "rating:explicit hoodie",
-    "rating:explicit sweater",
-    "rating:explicit jacket",
-    "rating:explicit coat",
-    "rating:explicit kimono",
-    "rating:explicit yukata",
-    "rating:explicit maid",
-    "rating:explicit miko",
-    "rating:explicit armor",
-    "rating:explicit dress",
-    "rating:explicit wedding_dress",
-    "rating:explicit formal",
-    "rating:explicit casual",
-
-    # =========================================================
-    # ФЭНТЕЗИ
-    # =========================================================
-
-    "rating:explicit fantasy",
-    "rating:explicit elf",
-    "rating:explicit witch",
-    "rating:explicit magical_girl",
-    "rating:explicit angel",
-    "rating:explicit demon_girl",
-    "rating:explicit cat_ears",
-    "rating:explicit fox_ears",
-    "rating:explicit bunny_ears",
-    "rating:explicit animal_ears",
-    "rating:explicit furry",
-    "rating:explicit wings",
-    "rating:explicit horns",
-    "rating:explicit tail",
-
-    # =========================================================
-    # СЦЕНЫ И ПЕЙЗАЖИ
-    # =========================================================
-
     "rating:explicit scenery",
     "rating:explicit landscape",
-    "rating:explicit beach",
-    "rating:explicit ocean",
-    "rating:explicit sea",
-    "rating:explicit sunset",
-    "rating:explicit sunrise",
-    "rating:explicit night",
-    "rating:explicit starry_sky",
-    "rating:explicit sky",
-    "rating:explicit forest",
-    "rating:explicit mountain",
-    "rating:explicit city",
-    "rating:explicit cityscape",
-    "rating:explicit flowers",
-    "rating:explicit cherry_blossoms",
-    "rating:explicit rain",
-    "rating:explicit snow",
-    "rating:explicit winter",
-    "rating:explicit autumn",
-    "rating:explicit spring",
-    "rating:explicit summer",
-
-    # =========================================================
-    # АНИМЕ / МЕДИА
-    # =========================================================
-
+    "rating:explicit fantasy",
+    "rating:explicit school_uniform",
+    "rating:explicit animal_ears",
+    "rating:explicit furry",
     "rating:explicit vocaloid",
     "rating:explicit hatsune_miku",
-    "rating:explicit hololive",
-    "rating:explicit nijisanji",
-    "rating:explicit touhou",
-
-    # =========================================================
-    # ПОПУЛЯРНЫЕ АНИМЕ
-    # =========================================================
-
-    "rating:explicit neon_genesis_evangelion",
-    "rating:explicit sailor_moon",
-    "rating:explicit pokemon",
-    "rating:explicit naruto",
-    "rating:explicit one_piece",
-    "rating:explicit bleach",
-    "rating:explicit dragon_ball",
-    "rating:explicit my_hero_academia",
-    "rating:explicit jujutsu_kaisen",
-    "rating:explicit demon_slayer",
-    "rating:explicit chainsaw_man",
-    "rating:explicit spy_x_family",
-    "rating:explicit frieren",
-    "rating:explicit re_zero",
-    "rating:explicit konosuba",
-    "rating:explicit fate_series",
-    "rating:explicit bocchi_the_rock",
-
-    # =========================================================
-    # ИГРОВЫЕ АНИМЕ-ФРАНШИЗЫ
-    # =========================================================
-
+    "rating:explicit teto",
+    "rating:explicit neru",
+    "rating:explicit fnaf",
     "rating:explicit genshin_impact",
-    "rating:explicit honkai:_star_rail",
-    "rating:explicit honkai_impact_3rd",
-    "rating:explicit zenless_zone_zero",
-    "rating:explicit wuthering_waves",
-    "rating:explicit blue_archive",
-    "rating:explicit arknights",
-    "rating:explicit azur_lane",
-    "rating:explicit girls_frontline",
-    "rating:explicit project_sekai",
-    "rating:explicit granblue_fantasy",
-    "rating:explicit fate_grand_order",
-
-    # =========================================================
-    # ДОПОЛНИТЕЛЬНЫЕ КАТЕГОРИИ
-    # =========================================================
-
-    "rating:explicit school",
-    "rating:explicit classroom",
-    "rating:explicit library",
-    "rating:explicit bedroom",
-    "rating:explicit cafe",
-    "rating:explicit restaurant",
-    "rating:explicit train",
-    "rating:explicit street",
-    "rating:explicit park",
-    "rating:explicit festival",
-    "rating:explicit fireworks",
-    "rating:explicit moon",
-    "rating:explicit stars",
-    "rating:explicit clouds",
+    "rating:explicit league_of_legends",
+    "rating:explicit overwatch",
+    "rating:explicit valorant",
+    "rating:explicit minecraft",
 ]
 
 
@@ -542,21 +422,32 @@ def get_danbooru_anime():
 
     last_error = None
 
-    for tags in tags_list:
+    attempts = min(
+        DANBOORU_MAX_ATTEMPTS,
+        len(tags_list),
+    )
+
+    for tags in tags_list[:attempts]:
         try:
             print(
                 "[Danbooru Anime] "
                 f"Пробуем: {tags}"
             )
 
-            result = (
-                get_random_danbooru(
-                    tags,
-                    "Danbooru Anime",
-                )
+            result = get_random_danbooru(
+                tags,
+                "Danbooru Anime",
             )
 
             if result:
+                remember_id(
+                    DANBOORU_USED_IDS,
+                    DANBOORU_MEMORY_LOCK,
+                    result.get(
+                        "post_id"
+                    ),
+                )
+
                 print(
                     "[Danbooru Anime] "
                     "Новый пост найден"
@@ -569,26 +460,31 @@ def get_danbooru_anime():
 
             print(
                 "[Danbooru Anime] "
-                f"Запрос не подошёл: "
+                f"Запрос пропущен: "
                 f"{error}"
             )
 
-            continue
-
+    # Широкий SAFE fallback.
     try:
         print(
             "[Danbooru Anime] "
-            "Пробуем общий EXPLICIT fallback"
+            "Пробуем SAFE fallback..."
         )
 
-        result = (
-            get_random_danbooru(
-                "rating:explicit",
-                "Danbooru Anime",
-            )
+        result = get_random_danbooru(
+            "rating:explicit anime",
+            "Danbooru Anime",
         )
 
         if result:
+            remember_id(
+                DANBOORU_USED_IDS,
+                DANBOORU_MEMORY_LOCK,
+                result.get(
+                    "post_id"
+                ),
+            )
+
             return result
 
     except Exception as error:
@@ -602,8 +498,7 @@ def get_danbooru_anime():
 
     raise RuntimeError(
         "Danbooru Anime: "
-        "не удалось найти новый "
-        "EXPLICIT пост"
+        "не удалось найти новый SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -612,181 +507,44 @@ def get_danbooru_anime():
     )
 
 
+# =========================================================
+# DANBOORU GAMES
+# =========================================================
+
 DANBOORU_GAME_TAGS = [
-    # Genshin / HoYoverse
     "rating:explicit genshin_impact",
     "rating:explicit honkai:_star_rail",
-    "rating:explicit honkai_impact_3rd",
     "rating:explicit zenless_zone_zero",
-    "rating:explicit tears_of_themis",
-
-    # Popular live-service
-    "rating:explicit wuthering_waves",
-    "rating:explicit arknights",
-    "rating:explicit blue_archive",
-    "rating:explicit azur_lane",
-    "rating:explicit girls_frontline",
-    "rating:explicit nikke",
-    "rating:explicit path_to_nowhere",
-    "rating:explicit punishing:_gray_raven",
-    "rating:explicit neural_cloud",
-
-    # MOBA / competitive
     "rating:explicit league_of_legends",
-    "rating:explicit dota_2",
     "rating:explicit overwatch",
     "rating:explicit valorant",
     "rating:explicit apex_legends",
-    "rating:explicit paladins",
-    "rating:explicit smite",
-
-    # Fighting
-    "rating:explicit tekken",
-    "rating:explicit street_fighter",
-    "rating:explicit guilty_gear",
-    "rating:explicit mortal_kombat",
-    "rating:explicit soulcalibur",
-    "rating:explicit the_king_of_fighters",
-    "rating:explicit dead_or_alive",
-    "rating:explicit blazblue",
-    "rating:explicit skullgirls",
-
-    # JRPG / RPG
+    "rating:explicit fortnite",
+    "rating:explicit minecraft",
+    "rating:explicit pokemon",
     "rating:explicit final_fantasy",
-    "rating:explicit final_fantasy_vii",
-    "rating:explicit final_fantasy_xiv",
-    "rating:explicit persona",
-    "rating:explicit persona_5",
-    "rating:explicit shin_megami_tensei",
-    "rating:explicit fire_emblem",
-    "rating:explicit dragon_quest",
-    "rating:explicit tales_of_series",
+    "rating:explicit resident_evil",
     "rating:explicit nier_automata",
-    "rating:explicit nier_replicant",
-    "rating:explicit kingdom_hearts",
-    "rating:explicit xenoblade_chronicles",
-
-    # Dark / Action RPG
+    "rating:explicit cyberpunk_2077",
+    "rating:explicit the_witcher",
+    "rating:explicit baldurs_gate_3",
     "rating:explicit elden_ring",
     "rating:explicit dark_souls",
-    "rating:explicit bloodborne",
-    "rating:explicit sekiro",
-    "rating:explicit demon's_souls",
-    "rating:explicit monster_hunter",
     "rating:explicit devil_may_cry",
-    "rating:explicit bayonetta",
-
-    # Horror
-    "rating:explicit resident_evil",
-    "rating:explicit resident_evil_2",
-    "rating:explicit resident_evil_3",
-    "rating:explicit resident_evil_4",
-    "rating:explicit resident_evil_5",
-    "rating:explicit resident_evil_6",
-    "rating:explicit resident_evil_7",
-    "rating:explicit resident_evil_village",
-    "rating:explicit silent_hill",
+    "rating:explicit guilty_gear",
+    "rating:explicit street_fighter",
+    "rating:explicit tekken",
+    "rating:explicit persona",
+    "rating:explicit dota_2",
     "rating:explicit dead_by_daylight",
-    "rating:explicit five_nights_at_freddy's",
-    "rating:explicit amnesia",
-    "rating:explicit little_nightmares",
-
-    # Western RPG
-    "rating:explicit the_witcher",
-    "rating:explicit the_witcher_3",
-    "rating:explicit cyberpunk_2077",
-    "rating:explicit baldurs_gate_3",
-    "rating:explicit dragon_age",
-    "rating:explicit mass_effect",
-    "rating:explicit fallout",
-    "rating:explicit elder_scrolls",
-    "rating:explicit skyrim",
-    "rating:explicit starfield",
-
-    # Shooter
-    "rating:explicit call_of_duty",
-    "rating:explicit battlefield",
-    "rating:explicit halo",
-    "rating:explicit doom",
-    "rating:explicit quake",
-    "rating:explicit titanfall",
-    "rating:explicit borderlands",
-    "rating:explicit destiny",
-    "rating:explicit destiny_2",
-    "rating:explicit warframe",
-
-    # Nintendo
-    "rating:explicit pokemon",
-    "rating:explicit pokemon_scarlet",
-    "rating:explicit pokemon_violet",
-    "rating:explicit the_legend_of_zelda",
-    "rating:explicit super_mario",
-    "rating:explicit mario_kart",
-    "rating:explicit fire_emblem",
-    "rating:explicit splatoon",
-    "rating:explicit animal_crossing",
-    "rating:explicit kirby",
-    "rating:explicit metroid",
-
-    # Minecraft / sandbox
-    "rating:explicit minecraft",
-    "rating:explicit terraria",
-    "rating:explicit stardew_valley",
-    "rating:explicit dont_starve",
-    "rating:explicit sims",
-    "rating:explicit the_sims_4",
-
-    # Anime games
-    "rating:explicit fate_grand_order",
-    "rating:explicit fate_stay_night",
-    "rating:explicit fate_extra",
-    "rating:explicit granblue_fantasy",
-    "rating:explicit princess_connect",
-    "rating:explicit uma_musume",
-    "rating:explicit project_sekai",
-    "rating:explicit bang_dream",
-    "rating:explicit love_live",
-    "rating:explicit d4dj",
-
-    # Fighting / Anime
-    "rating:explicit dragon_ball",
-    "rating:explicit dragon_ball_fighterz",
-    "rating:explicit naruto",
-    "rating:explicit one_piece",
-    "rating:explicit bleach",
-    "rating:explicit my_hero_academia",
-    "rating:explicit jojo_no_kimyou_na_bouken",
-
-    # Valve
+    "rating:explicit risk_of_rain_2",
+    "rating:explicit fnaf",
     "rating:explicit portal",
-    "rating:explicit portal_2",
-    "rating:explicit half-life",
-    "rating:explicit team_fortress_2",
-    "rating:explicit left_4_dead",
-    "rating:explicit counter-strike",
-
-    # Ubisoft
-    "rating:explicit assassins_creed",
-    "rating:explicit far_cry",
-    "rating:explicit watch_dogs",
-    "rating:explicit rainbow_six",
-
-    # Other popular games
-    "rating:explicit fortnite",
-    "rating:explicit roblox",
-    "rating:explicit overwatch_2",
-    "rating:explicit palworld",
-    "rating:explicit lethal_company",
-    "rating:explicit phasmophobia",
-    "rating:explicit lethal_company",
-    "rating:explicit hollow_knight",
-    "rating:explicit hades",
-    "rating:explicit hades_ii",
-    "rating:explicit celeste",
-    "rating:explicit undertale",
-    "rating:explicit deltarune",
-    "rating:explicit omori",
+    "rating:explicit halo",
+    "rating:explicit fallout",
+    "rating:explicit furry game_character",
 ]
+
 
 def get_danbooru_games():
     tags_list = (
@@ -797,24 +555,35 @@ def get_danbooru_games():
 
     last_error = None
 
-    for tags in tags_list:
+    attempts = min(
+        DANBOORU_MAX_ATTEMPTS,
+        len(tags_list),
+    )
+
+    for tags in tags_list[:attempts]:
         try:
             print(
                 "[Danbooru Games] "
                 f"Пробуем: {tags}"
             )
 
-            result = (
-                get_random_danbooru(
-                    tags,
-                    "Danbooru Games",
-                )
+            result = get_random_danbooru(
+                tags,
+                "Danbooru Games",
             )
 
             if result:
+                remember_id(
+                    DANBOORU_USED_IDS,
+                    DANBOORU_MEMORY_LOCK,
+                    result.get(
+                        "post_id"
+                    ),
+                )
+
                 print(
                     "[Danbooru Games] "
-                    "Новый игровой пост найден"
+                    "Новый пост найден"
                 )
 
                 return result
@@ -824,26 +593,31 @@ def get_danbooru_games():
 
             print(
                 "[Danbooru Games] "
-                f"Запрос не подошёл: "
+                f"Запрос пропущен: "
                 f"{error}"
             )
 
-            continue
-
+    # Общий игровой SAFE fallback.
     try:
         print(
             "[Danbooru Games] "
-            "Пробуем общий EXPLICIT fallback"
+            "Пробуем SAFE game fallback..."
         )
 
-        result = (
-            get_random_danbooru(
-                "rating:explicit",
-                "Danbooru Games",
-            )
+        result = get_random_danbooru(
+            "rating:explicit game",
+            "Danbooru Games",
         )
 
         if result:
+            remember_id(
+                DANBOORU_USED_IDS,
+                DANBOORU_MEMORY_LOCK,
+                result.get(
+                    "post_id"
+                ),
+            )
+
             return result
 
     except Exception as error:
@@ -857,8 +631,8 @@ def get_danbooru_games():
 
     raise RuntimeError(
         "Danbooru Games: "
-        "не удалось найти новый "
-        "EXPLICIT пост"
+        "не удалось найти новый SAFE "
+        "игровой пост"
         + (
             f": {last_error}"
             if last_error
@@ -871,10 +645,9 @@ def get_danbooru_games():
 # DOWNLOAD
 # =========================================================
 
-def download_image(image_url):
-    from io import BytesIO
-    from PIL import Image
-
+def download_image(
+    image_url,
+):
     response = requests.get(
         image_url,
         headers=DEFAULT_HEADERS,
@@ -887,9 +660,31 @@ def download_image(image_url):
     content_type = (
         response.headers.get(
             "Content-Type",
-            "",
-        ).lower()
+            "image/jpeg",
+        )
     )
+
+    content_length = (
+        response.headers.get(
+            "Content-Length"
+        )
+    )
+
+    if content_length:
+        try:
+            if (
+                int(content_length)
+                > MAX_IMAGE_SIZE
+            ):
+                response.close()
+
+                raise RuntimeError(
+                    "Изображение "
+                    "больше 8 MB"
+                )
+
+        except ValueError:
+            pass
 
     chunks = []
     total = 0
@@ -903,434 +698,60 @@ def download_image(image_url):
 
             total += len(chunk)
 
+            if total > MAX_IMAGE_SIZE:
+                raise RuntimeError(
+                    "Изображение "
+                    "больше 8 MB"
+                )
+
             chunks.append(chunk)
 
     finally:
         response.close()
 
-    original_data = b"".join(
+    content = b"".join(
         chunks
     )
 
-    if not original_data:
-        raise RuntimeError(
-            "Сервер вернул пустой файл"
-        )
-
-    print(
-        "[Download] Получено: "
-        f"{len(original_data) / 1024 / 1024:.2f} MB"
+    content_type_lower = (
+        content_type.lower()
     )
 
-    print(
-        "[Download] Content-Type: "
-        f"{content_type or 'не указан'}"
+    if "png" in content_type_lower:
+        extension = "png"
+
+    elif "webp" in content_type_lower:
+        extension = "webp"
+
+    elif "gif" in content_type_lower:
+        extension = "gif"
+
+    elif "jpeg" in content_type_lower:
+        extension = "jpg"
+
+    else:
+        extension = "jpg"
+
+    filename = (
+        f"image.{extension}"
     )
-
-    # =====================================================
-    # <= 8 MB
-    # =====================================================
-
-    if len(original_data) <= MAX_FILE_SIZE:
-        try:
-            test_image = Image.open(
-                BytesIO(original_data)
-            )
-
-            test_image.verify()
-
-        except Exception as error:
-            raise RuntimeError(
-                "Скачанный файл не является "
-                "корректным изображением: "
-                f"{error}"
-            )
-
-        try:
-            test_image = Image.open(
-                BytesIO(original_data)
-            )
-
-            detected_format = (
-                test_image.format
-            )
-
-        except Exception as error:
-            raise RuntimeError(
-                "Не удалось определить "
-                f"формат изображения: {error}"
-            )
-
-        print(
-            "[Download] "
-            "Определённый формат: "
-            f"{detected_format}"
-        )
-
-        if detected_format == "PNG":
-            extension = "png"
-            output_type = "image/png"
-
-        elif detected_format == "WEBP":
-            extension = "webp"
-            output_type = "image/webp"
-
-        elif detected_format == "GIF":
-            extension = "gif"
-            output_type = "image/gif"
-
-        elif detected_format in (
-            "JPEG",
-            "JPG",
-        ):
-            extension = "jpg"
-            output_type = "image/jpeg"
-
-        else:
-            extension = "jpg"
-            output_type = (
-                content_type
-                or "image/jpeg"
-            )
-
-        print(
-            "[Download] "
-            "Файл подходит по размеру."
-        )
-
-        if detected_format == "GIF":
-            print(
-                "[Download] "
-                "GIF отправляется "
-                "без изменения."
-            )
-
-        return (
-            f"image.{extension}",
-            original_data,
-            output_type,
-        )
-
-    # =====================================================
-    # > 8 MB
-    # =====================================================
-
-    print(
-        "[Download] "
-        "Изображение больше 8 MB."
-    )
-
-    print(
-        "[Download] "
-        "Начинаем автоматическое сжатие..."
-    )
-
-    try:
-        image = Image.open(
-            BytesIO(original_data)
-        )
-
-    except Exception as error:
-        raise RuntimeError(
-            "Не удалось открыть скачанное "
-            "изображение для сжатия: "
-            f"{error}"
-        )
-
-    try:
-        print(
-            "[Download] Формат: "
-            f"{image.format}"
-        )
-
-        print(
-            "[Download] Разрешение: "
-            f"{image.width}x{image.height}"
-        )
-
-        # =================================================
-        # ANIMATION
-        # =================================================
-
-        if getattr(
-            image,
-            "is_animated",
-            False,
-        ):
-            print(
-                "[Download] "
-                "Обнаружена анимация."
-            )
-
-            print(
-                "[Download] "
-                "Для файла больше 8 MB "
-                "используется первый кадр."
-            )
-
-            image.seek(0)
-
-        # =================================================
-        # RGB
-        # =================================================
-
-        if image.mode in (
-            "RGBA",
-            "LA",
-            "P",
-        ):
-            background = Image.new(
-                "RGB",
-                image.size,
-                "white",
-            )
-
-            if image.mode == "P":
-                image = image.convert(
-                    "RGBA"
-                )
-
-            if image.mode in (
-                "RGBA",
-                "LA",
-            ):
-                background.paste(
-                    image,
-                    (0, 0),
-                    image.getchannel(
-                        "A"
-                    ),
-                )
-
-                image = background
-
-            else:
-                image = image.convert(
-                    "RGB"
-                )
-
-        else:
-            image = image.convert(
-                "RGB"
-            )
-
-        # =================================================
-        # JPEG QUALITY
-        # =================================================
-
-        qualities = [
-            90,
-            85,
-            80,
-            75,
-            70,
-            65,
-            60,
-            55,
-            50,
-            45,
-            40,
-        ]
-
-        for quality in qualities:
-            output = BytesIO()
-
-            image.save(
-                output,
-                format="JPEG",
-                quality=quality,
-                optimize=True,
-            )
-
-            compressed_data = (
-                output.getvalue()
-            )
-
-            print(
-                "[Download] "
-                f"JPEG quality {quality}: "
-                f"{len(compressed_data) / 1024 / 1024:.2f} MB"
-            )
-
-            if (
-                len(compressed_data)
-                <= MAX_FILE_SIZE
-            ):
-                print(
-                    "[Download] "
-                    "Сжатие успешно."
-                )
-
-                return (
-                    "image.jpg",
-                    compressed_data,
-                    "image/jpeg",
-                )
-
-        # =================================================
-        # RESIZE
-        # =================================================
-
-        print(
-            "[Download] "
-            "Quality недостаточно."
-        )
-
-        print(
-            "[Download] "
-            "Уменьшаем разрешение..."
-        )
-
-        for scale in [
-            0.90,
-            0.80,
-            0.70,
-            0.60,
-            0.50,
-            0.40,
-            0.30,
-        ]:
-            new_width = max(
-                1,
-                int(
-                    image.width
-                    * scale
-                ),
-            )
-
-            new_height = max(
-                1,
-                int(
-                    image.height
-                    * scale
-                ),
-            )
-
-            current_image = (
-                image.resize(
-                    (
-                        new_width,
-                        new_height,
-                    ),
-                    Image.LANCZOS,
-                )
-            )
-
-            for quality in [
-                85,
-                75,
-                65,
-                55,
-                45,
-                35,
-            ]:
-                output = BytesIO()
-
-                current_image.save(
-                    output,
-                    format="JPEG",
-                    quality=quality,
-                    optimize=True,
-                )
-
-                compressed_data = (
-                    output.getvalue()
-                )
-
-                print(
-                    "[Download] "
-                    f"{new_width}x"
-                    f"{new_height}, "
-                    f"quality {quality}: "
-                    f"{len(compressed_data) / 1024 / 1024:.2f} MB"
-                )
-
-                if (
-                    len(compressed_data)
-                    <= MAX_FILE_SIZE
-                ):
-                    print(
-                        "[Download] "
-                        "Изображение "
-                        "успешно сжато."
-                    )
-
-                    return (
-                        "image.jpg",
-                        compressed_data,
-                        "image/jpeg",
-                    )
-
-        raise RuntimeError(
-            "Не удалось сжать "
-            "изображение до 8 MB"
-        )
-
-    except Exception as error:
-        raise RuntimeError(
-            "Ошибка обработки "
-            "изображения: "
-            f"{error}"
-        )
-
-
-# =========================================================
-# DISCORD ERROR
-# =========================================================
-
-def get_discord_error(response):
-    discord_code = None
-    discord_message = None
-
-    try:
-        data = response.json()
-
-        discord_code = data.get(
-            "code"
-        )
-
-        discord_message = data.get(
-            "message"
-        )
-
-    except ValueError:
-        discord_message = (
-            response.text
-        )
 
     return (
-        discord_code,
-        discord_message,
+        filename,
+        content,
+        content_type,
     )
 
 
 # =========================================================
-# DISCORD SEND
+# DISCORD
 # =========================================================
 
-def send_to_discord(image):
-    source = image.get(
-        "source",
-        "Unknown",
-    )
-
-    image_url = image.get(
-        "url"
-    )
-
-    tags = image.get(
-        "tags"
-    )
-
-    post_id = image.get(
-        "post_id"
-    )
-
-    if not tags:
-        tags = "—"
-
-    if post_id is None:
-        post_id = "—"
+def send_to_discord(
+    image,
+):
+    source = image["source"]
+    image_url = image["url"]
 
     webhook_map = {
         "Waifu.im": (
@@ -1365,25 +786,6 @@ def send_to_discord(image):
             "не настроен"
         )
 
-    print(
-        "[Discord] "
-        f"Источник: {source}"
-    )
-
-    print(
-        "[Discord] "
-        f"Тег: {tags}"
-    )
-
-    print(
-        "[Discord] "
-        f"ID поста: {post_id}"
-    )
-
-    # =====================================================
-    # DOWNLOAD
-    # =====================================================
-
     (
         filename,
         image_data,
@@ -1392,9 +794,23 @@ def send_to_discord(image):
         image_url
     )
 
+    # =====================================================
+    # DISCORD SPOILER
+    # =====================================================
+
+    if DISCORD_IMAGE_SPOILER:
+        filename = (
+            f"SPOILER_{filename}"
+        )
+
     print(
-        "[Discord] "
-        f"Файл: {filename}"
+        f"[Discord] Отправка: "
+        f"{source}"
+    )
+
+    print(
+        f"[Discord] Файл: "
+        f"{filename}"
     )
 
     print(
@@ -1402,145 +818,50 @@ def send_to_discord(image):
         f"{len(image_data) / 1024 / 1024:.2f} MB"
     )
 
-    # =====================================================
-    # MESSAGE
-    # =====================================================
-
-    message_content = (
-        f"{message}\n"
-        f"Источник: {source}\n"
-        f"Тег: {tags}\n"
-        f"ID поста: {post_id}"
+    response = requests.post(
+        webhook_url,
+        data={
+            "content": (
+                f"{message}\n"
+                f"Источник: {source}"
+            )
+        },
+        files={
+            "file": (
+                filename,
+                image_data,
+                content_type,
+            )
+        },
+        timeout=45,
     )
-
-    # =====================================================
-    # SEND
-    # =====================================================
-
-    try:
-        response = requests.post(
-            webhook_url,
-            data={
-                "content": message_content
-            },
-            files={
-                "file": (
-                    filename,
-                    image_data,
-                    content_type,
-                )
-            },
-            timeout=45,
-        )
-
-    except requests.RequestException as error:
-        print(
-            "[Discord] "
-            f"Ошибка соединения: {error}"
-        )
-
-        raise RuntimeError(
-            "Discord connection error: "
-            f"{error}"
-        )
 
     print(
         "[Discord] HTTP: "
         f"{response.status_code}"
     )
 
-    # =====================================================
-    # SUCCESS
-    # =====================================================
-
-    if response.ok:
+    if not response.ok:
         print(
-            "[Discord] "
-            "Успешно отправлено."
-        )
-
-        return
-
-    # =====================================================
-    # ERROR
-    # =====================================================
-
-    (
-        discord_code,
-        discord_message,
-    ) = get_discord_error(
-        response
-    )
-
-    print(
-        "[Discord] "
-        f"Код ошибки: {discord_code}"
-    )
-
-    print(
-        "[Discord] "
-        f"Сообщение: {discord_message}"
-    )
-
-    # =====================================================
-    # 20009
-    # =====================================================
-
-    if (
-        response.status_code == 400
-        and discord_code == 20009
-    ):
-        print(
-            "[Discord] "
-            "ОШИБКА 20009"
-        )
-
-        print(
-            "[Discord] "
-            "Контент отклонён "
-            "получателем."
-        )
-
-        print(
-            "[Discord] "
-            f"Источник: {source}"
-        )
-
-        print(
-            "[Discord] "
-            f"Тег: {tags}"
-        )
-
-        print(
-            "[Discord] "
-            f"ID поста: {post_id}"
+            "[Discord] Ответ: "
+            f"{response.text[:1000]}"
         )
 
         raise RuntimeError(
-            "DISCORD_20009"
+            f"Discord HTTP "
+            f"{response.status_code}: "
+            f"{response.text[:500]}"
         )
 
-    # =====================================================
-    # OTHER
-    # =====================================================
-
     print(
-        "[Discord] Ответ:"
-    )
-
-    print(
-        response.text[:1000]
-    )
-
-    raise RuntimeError(
-        f"Discord HTTP "
-        f"{response.status_code}: "
-        f"{response.text[:500]}"
+        "[Discord] "
+        f"Успешно отправлено: "
+        f"{source}"
     )
 
 
 # =========================================================
-# PUBLISH NORMAL SOURCE
+# PUBLISH
 # =========================================================
 
 def publish_source(
@@ -1550,33 +871,9 @@ def publish_source(
     try:
         image = getter()
 
-        print(
-            "-------------------------------------------------------"
+        send_to_discord(
+            image
         )
-
-        print(
-            f"[{name}] "
-            f"Источник: "
-            f"{image.get('source')}"
-        )
-
-        print(
-            f"[{name}] "
-            f"Тег: "
-            f"{image.get('tags') or '—'}"
-        )
-
-        print(
-            f"[{name}] "
-            f"ID поста: "
-            f"{image.get('post_id') or '—'}"
-        )
-
-        print(
-            "-------------------------------------------------------"
-        )
-
-        send_to_discord(image)
 
         print(
             f"[{name}] "
@@ -1603,156 +900,6 @@ def publish_source(
 
 
 # =========================================================
-# DANBOORU GAMES PUBLISH
-# =========================================================
-
-def publish_danbooru_games():
-    print(
-        "======================================================="
-    )
-
-    print(
-        "[Danbooru Games] "
-        "Запуск публикации"
-    )
-
-    last_error = None
-
-    for attempt in range(
-        1,
-        MAX_DISCORD_RETRIES + 1,
-    ):
-        print(
-            "-------------------------------------------------------"
-        )
-
-        print(
-            "[Danbooru Games] "
-            f"Попытка {attempt}/"
-            f"{MAX_DISCORD_RETRIES}"
-        )
-
-        try:
-            image = (
-                get_danbooru_games()
-            )
-
-            print(
-                "[Danbooru Games] "
-                f"Тег: {image.get('tags')}"
-            )
-
-            print(
-                "[Danbooru Games] "
-                f"ID: {image.get('post_id')}"
-            )
-
-            send_to_discord(
-                image
-            )
-
-            print(
-                "[Danbooru Games] "
-                "Успешно опубликовано"
-            )
-
-            return {
-                "source": (
-                    "Danbooru Games"
-                ),
-                "success": True,
-                "error": None,
-            }
-
-        except RuntimeError as error:
-            last_error = error
-
-            error_text = str(error)
-
-            # =================================================
-            # DISCORD 20009
-            # =================================================
-
-            if error_text == "DISCORD_20009":
-                print(
-                    "[Danbooru Games] "
-                    "Discord отклонил пост "
-                    "кодом 20009."
-                )
-
-                print(
-                    "[Danbooru Games] "
-                    "Берём следующий пост..."
-                )
-
-                continue
-
-            # =================================================
-            # BAD IMAGE
-            # =================================================
-
-            if (
-                "не является" in error_text
-                or "Не удалось открыть" in error_text
-                or "пустой файл" in error_text
-                or "Не удалось определить" in error_text
-                or "Ошибка обработки" in error_text
-            ):
-                print(
-                    "[Danbooru Games] "
-                    "Файл поста повреждён, "
-                    "не поддерживается "
-                    "или не является "
-                    "изображением."
-                )
-
-                print(
-                    "[Danbooru Games] "
-                    "Пропускаем пост."
-                )
-
-                print(
-                    "[Danbooru Games] "
-                    "Берём следующий пост..."
-                )
-
-                continue
-
-            print(
-                "[Danbooru Games] "
-                f"Ошибка: {error}"
-            )
-
-            break
-
-        except Exception as error:
-            last_error = error
-
-            print(
-                "[Danbooru Games] "
-                f"Неожиданная ошибка: "
-                f"{error}"
-            )
-
-            break
-
-    print(
-        "[Danbooru Games] "
-        "Не удалось опубликовать "
-        f"пост за {MAX_DISCORD_RETRIES} попыток."
-    )
-
-    return {
-        "source": "Danbooru Games",
-        "success": False,
-        "error": str(
-            last_error
-            or "Неизвестная ошибка"
-        ),
-    }
-
-
-# =========================================================
 # POST
 # =========================================================
 
@@ -1770,62 +917,55 @@ def post_image():
         "======================================================="
     )
 
-    results = []
-
-    # =====================================================
-    # WAIFU
-    # =====================================================
+    sources = []
 
     if WAIFU_WEBHOOK_URL:
-        results.append(
-            publish_source(
+        sources.append(
+            (
                 "Waifu.im",
                 get_random_waifu,
             )
         )
-
-    # =====================================================
-    # DANBOORU ANIME
-    # =====================================================
 
     if (
         DANBOORU_WEBHOOK_URL
         and DANBOORU_USERNAME
         and DANBOORU_API_KEY
     ):
-        results.append(
-            publish_source(
+        sources.append(
+            (
                 "Danbooru Anime",
                 get_danbooru_anime,
             )
         )
-
-    # =====================================================
-    # DANBOORU GAMES
-    # =====================================================
 
     if (
         DANBOORU_GAMES_WEBHOOK_URL
         and DANBOORU_USERNAME
         and DANBOORU_API_KEY
     ):
-        results.append(
-            publish_danbooru_games()
+        sources.append(
+            (
+                "Danbooru Games",
+                get_danbooru_games,
+            )
         )
 
-    # =====================================================
-    # NO SOURCES
-    # =====================================================
-
-    if not results:
+    if not sources:
         return Response(
             "No sources configured",
             status=500,
         )
 
-    # =====================================================
-    # RESULTS
-    # =====================================================
+    results = []
+
+    for name, getter in sources:
+        results.append(
+            publish_source(
+                name,
+                getter,
+            )
+        )
 
     successful = sum(
         1
@@ -1902,6 +1042,20 @@ def status():
                 and DANBOORU_API_KEY
             ),
         },
+
+        "settings": {
+            "discord_spoiler": (
+                DISCORD_IMAGE_SPOILER
+            ),
+
+            "excluded_tags": (
+                get_exclude_tags()
+            ),
+
+            "danbooru_max_attempts": (
+                DANBOORU_MAX_ATTEMPTS
+            ),
+        },
     }
 
 
@@ -1945,3 +1099,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
+```
