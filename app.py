@@ -56,6 +56,9 @@ DANBOORU_MAX_ATTEMPTS = 20
 
 MAX_MEMORY = 1500
 
+# Сколько постов Danbooru Games
+# публиковать за один /post
+DANBOORU_GAMES_POSTS = 2
 
 # =========================================================
 # HEADERS
@@ -1124,7 +1127,14 @@ def post_image():
 
     results = []
 
-    for name, getter in sources:
+for name, getter in sources:
+
+    if name == "Danbooru Games":
+        posts_count = DANBOORU_GAMES_POSTS
+    else:
+        posts_count = 1
+
+    for _ in range(posts_count):
         results.append(
             publish_source(
                 name,
