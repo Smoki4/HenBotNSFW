@@ -364,7 +364,7 @@ def get_random_danbooru(
             )
         ).lower()
 
-        if rating != "s":
+        if rating != "e":
             continue
 
         # =================================================
