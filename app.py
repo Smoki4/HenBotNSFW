@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 
 # =========================================================
-# ENV / RENDER
+# ENV
 # =========================================================
 
 WAIFU_WEBHOOK_URL = os.environ.get(
@@ -22,8 +22,13 @@ DANBOORU_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_DANBOORU"
 )
 
-DANBOORU_GAMES_WEBHOOK_URL = os.environ.get(
-    "DISCORD_WEBHOOK_DANBOORU_GAMES"
+DANBOORU_GAMES_WEBHOOK_URL = (
+    os.environ.get(
+        "DISCORD_WEBHOOK_DANBOORU_GAMES"
+    )
+    or os.environ.get(
+        "DISCORD_WEBHOOK_RULE34_GAMES"
+    )
 )
 
 DANBOORU_USERNAME = os.environ.get(
@@ -48,27 +53,49 @@ DANBOORU_API = (
 # SETTINGS
 # =========================================================
 
-# Discord spoiler
 DISCORD_SPOILER = True
 
-# Максимальный размер файла
 MAX_IMAGE_SIZE = 8 * 1024 * 1024
 
-# Максимум попыток поиска Danbooru
 DANBOORU_MAX_ATTEMPTS = 30
 
-# Сколько ID помнить
 MAX_MEMORY = 1500
 
-# ---------------------------------------------------------
-# СКОЛЬКО ПОСТОВ ПУБЛИКОВАТЬ ЗА /post
-# ---------------------------------------------------------
+# Games публикует 2 картинки
+GAMES_POST_COUNT = 2
 
-WAIFU_POSTS = 1
 
-DANBOORU_ANIME_POSTS = 1
+# =========================================================
+# EXCLUDED TAGS
+# =========================================================
 
-DANBOORU_GAMES_POSTS = 2
+DANBOORU_EXCLUDE_TAGS = [
+    "gore",
+    "blood",
+    "scat",
+    "feces",
+    "vomit",
+    "vore",
+]
+
+
+def get_exclude_tags():
+    result = []
+
+    for tag in DANBOORU_EXCLUDE_TAGS:
+        tag = str(tag).strip()
+
+        if not tag:
+            continue
+
+        if tag.startswith("-"):
+            result.append(tag)
+        else:
+            result.append(
+                f"-{tag}"
+            )
+
+    return result
 
 
 # =========================================================
@@ -81,7 +108,6 @@ DEFAULT_HEADERS = {
         "(compatible; GamePoster/1.0)"
     )
 }
-
 
 DANBOORU_HEADERS = {
     "User-Agent": (
@@ -138,7 +164,7 @@ def danbooru_id_used(post_id):
 
 
 # =========================================================
-# DANBOORU RATE LIMIT
+# RATE LIMIT
 # =========================================================
 
 DANBOORU_LOCK = threading.Lock()
@@ -158,8 +184,7 @@ def danbooru_wait():
         )
 
         wait_time = (
-            1.2
-            - elapsed
+            1.2 - elapsed
         )
 
         if wait_time > 0:
@@ -179,11 +204,10 @@ def danbooru_wait():
 def get_random_waifu():
     print(
         "[Waifu.im] "
-        "Получаем SAFE изображение..."
+        "Получаем изображение..."
     )
 
     for attempt in range(5):
-
         try:
             response = requests.get(
                 "https://api.waifu.im/images",
@@ -195,17 +219,6 @@ def get_random_waifu():
                 headers=DEFAULT_HEADERS,
                 timeout=30,
             )
-
-            print(
-                "[Waifu.im] HTTP: "
-                f"{response.status_code}"
-            )
-
-            if not response.ok:
-                print(
-                    "[Waifu.im] BODY: "
-                    f"{response.text[:1000]}"
-                )
 
             response.raise_for_status()
 
@@ -232,7 +245,6 @@ def get_random_waifu():
             }
 
         except Exception as error:
-
             print(
                 "[Waifu.im] "
                 f"Попытка "
@@ -242,111 +254,125 @@ def get_random_waifu():
 
     raise RuntimeError(
         "Waifu.im: "
-        "не удалось получить "
-        "SAFE изображение"
+        "не удалось получить изображение"
     )
 
 
 # =========================================================
-# DANBOORU QUERY
+# DANBOORU SEARCH
 # =========================================================
-
-def build_safe_query(base_tags):
-    """
-    Danbooru может отклонять запросы,
-    содержащие слишком много тегов.
-
-    Поэтому здесь разрешено максимум
-    2 тега на запрос.
-
-    rating:explicit и другие rating-теги
-    удаляются.
-    """
-
-    if isinstance(
-        base_tags,
-        (list, tuple),
-    ):
-        tags = []
-
-        for tag in base_tags:
-
-            tag = str(tag).strip()
-
-            if not tag:
-                continue
-
-            tags.extend(
-                tag.split()
-            )
-
-    else:
-        tags = str(
-            base_tags
-        ).split()
-
-    safe_tags = []
-
-    for tag in tags:
-
-        lowered = tag.lower()
-
-        # Не позволяем добавлять
-        # rating:explicit / rating:q
-        # / rating:s и т.д.
-        if lowered.startswith(
-            "rating:"
-        ):
-            continue
-
-        # Не используем отрицательные
-        # теги в запросе.
-        if tag.startswith("-"):
-            continue
-
-        safe_tags.append(tag)
-
-    # КРИТИЧЕСКИ ВАЖНО:
-    # максимум 2 тега.
-    safe_tags = safe_tags[:2]
-
-    return " ".join(
-        safe_tags
-    )
-
-
-# =========================================================
-# DANBOORU CORE
+#
+# ВАЖНО:
+#
+# Danbooru на твоём аккаунте/endpoint сейчас
+# разрешает максимум 2 TAGS за запрос.
+#
+# Поэтому мы НИКОГДА не отправляем:
+#
+# rating:e 1girl blue_lock
+#
+# Это 3 тега.
+#
+# Разрешены:
+#
+# rating:e
+# rating:e 1girl
+# rating:e blue_lock
+#
 # =========================================================
 
 def get_random_danbooru(
-    base_tags,
+    search_tags,
     source_name,
 ):
     if not DANBOORU_USERNAME:
-
         raise RuntimeError(
-            "DANBOORU_USERNAME "
-            "не настроен"
+            "DANBOORU_USERNAME не настроен"
         )
 
     if not DANBOORU_API_KEY:
-
         raise RuntimeError(
-            "DANBOORU_API_KEY "
-            "не настроен"
+            "DANBOORU_API_KEY не настроен"
         )
 
-    final_tags = build_safe_query(
-        base_tags
-    )
+    # -----------------------------------------------------
+    # Нормализуем теги
+    # -----------------------------------------------------
 
-    if not final_tags:
+    if isinstance(
+        search_tags,
+        str,
+    ):
+        tags = search_tags.split()
 
-        raise RuntimeError(
-            f"{source_name}: "
-            "пустой безопасный запрос"
+    else:
+        tags = list(search_tags)
+
+    tags = [
+        str(tag).strip()
+        for tag in tags
+        if str(tag).strip()
+    ]
+
+    # -----------------------------------------------------
+    # Удаляем дубликаты
+    # -----------------------------------------------------
+
+    clean_tags = []
+
+    for tag in tags:
+        if tag not in clean_tags:
+            clean_tags.append(tag)
+
+    # -----------------------------------------------------
+    # SAFE ONLY
+    # -----------------------------------------------------
+    #
+    # rating:e — единственный rating,
+    # который мы используем.
+    #
+    # ВАЖНО:
+    # Не добавляем сюда excluded tags,
+    # потому что это снова превысило бы
+    # лимит в 2 тега.
+    #
+    # -----------------------------------------------------
+
+    clean_tags = [
+        tag
+        for tag in clean_tags
+        if not tag.startswith(
+            "rating:"
         )
+    ]
+
+    # Максимум ОДИН дополнительный тег.
+    #
+    # В результате всегда:
+    #
+    # rating:e
+    #
+    # или
+    #
+    # rating:e 1girl
+    #
+    # или
+    #
+    # rating:e blue_lock
+
+    selected_extra = None
+
+    if clean_tags:
+        selected_extra = clean_tags[0]
+
+    if selected_extra:
+        final_tags = (
+            f"rating:e "
+            f"{selected_extra}"
+        )
+
+    else:
+        final_tags = "rating:e"
 
     print(
         f"[{source_name}] "
@@ -355,19 +381,28 @@ def get_random_danbooru(
 
     danbooru_wait()
 
-    response = requests.get(
-        f"{DANBOORU_API}/posts.json",
-        params={
-            "limit": 100,
-            "tags": final_tags,
-        },
-        auth=(
-            DANBOORU_USERNAME,
-            DANBOORU_API_KEY,
-        ),
-        headers=DANBOORU_HEADERS,
-        timeout=30,
-    )
+    try:
+        response = requests.get(
+            f"{DANBOORU_API}/posts.json",
+            params={
+                "limit": 100,
+                "tags": final_tags,
+            },
+            auth=(
+                DANBOORU_USERNAME,
+                DANBOORU_API_KEY,
+            ),
+            headers=DANBOORU_HEADERS,
+            timeout=30,
+        )
+
+    except Exception as error:
+        print(
+            f"[{source_name}] "
+            f"REQUEST ERROR: {error}"
+        )
+
+        raise
 
     print(
         f"[{source_name}] "
@@ -375,23 +410,21 @@ def get_random_danbooru(
         f"{response.status_code}"
     )
 
-    if not response.ok:
+    # -----------------------------------------------------
+    # DEBUG BODY
+    # -----------------------------------------------------
 
+    if response.status_code != 200:
         print(
-            f"[{source_name}] "
-            "BODY: "
-            f"{response.text[:2000]}"
+            f"[{source_name}] BODY: "
+            f"{response.text[:1500]}"
         )
 
     response.raise_for_status()
 
     data = response.json()
 
-    if not isinstance(
-        data,
-        list,
-    ):
-
+    if not isinstance(data, list):
         raise RuntimeError(
             f"{source_name}: "
             "некорректный ответ API"
@@ -400,19 +433,16 @@ def get_random_danbooru(
     candidates = []
 
     for post in data:
-
-        post_id = post.get(
-            "id"
-        )
+        post_id = post.get("id")
 
         if danbooru_id_used(
             post_id
         ):
             continue
 
-        # =================================================
+        # -------------------------------------------------
         # SAFE ONLY
-        # =================================================
+        # -------------------------------------------------
 
         rating = str(
             post.get(
@@ -421,18 +451,12 @@ def get_random_danbooru(
             )
         ).lower()
 
-        # Оставляем ТОЛЬКО safe.
-        #
-        # s = safe
-        # q = questionable -> удаляем
-        # e = explicit -> удаляем
-        #
         if rating != "e":
             continue
 
-        # =================================================
+        # -------------------------------------------------
         # IMAGE URL
-        # =================================================
+        # -------------------------------------------------
 
         image_url = (
             post.get(
@@ -446,14 +470,39 @@ def get_random_danbooru(
         if not image_url:
             continue
 
-        # =================================================
+        # -------------------------------------------------
         # TAGS
-        # =================================================
+        # -------------------------------------------------
 
         tag_string = post.get(
             "tag_string",
             "",
         )
+
+        # -------------------------------------------------
+        # EXTRA LOCAL FILTER
+        # -------------------------------------------------
+        #
+        # Даже если API вернул что-то неожиданное,
+        # проверяем запрещённые теги локально.
+        #
+        # -------------------------------------------------
+
+        post_tags = set(
+            tag_string.split()
+        )
+
+        forbidden = False
+
+        for excluded in (
+            DANBOORU_EXCLUDE_TAGS
+        ):
+            if excluded in post_tags:
+                forbidden = True
+                break
+
+        if forbidden:
+            continue
 
         candidates.append(
             {
@@ -465,11 +514,10 @@ def get_random_danbooru(
         )
 
     if not candidates:
-
         raise RuntimeError(
             f"{source_name}: "
-            "новых SAFE "
-            "изображений не найдено"
+            "новых SAFE изображений "
+            "не найдено"
         )
 
     selected = random.choice(
@@ -477,138 +525,277 @@ def get_random_danbooru(
     )
 
     remember_danbooru_id(
-        selected.get(
-            "post_id"
-        )
+        selected.get("post_id")
     )
 
     return selected
 
 
 # =========================================================
-# DANBOORU ANIME
-# =========================================================
-#
-# ВАЖНО:
-#
-# Здесь НЕТ rating:explicit.
-#
-# Все запросы safe-only.
+# ANIME FEMALE TAGS
 # =========================================================
 
-DANBOORU_ANIME_TAGS = [
-
-    "anime",
+FEMALE_TAGS = [
     "1girl",
-    "1boy",
-    "solo",
-    "duo",
+    "2girls",
+    "3girls",
+    "4girls",
     "multiple_girls",
-    "scenery",
-    "landscape",
-    "fantasy",
-    "school_uniform",
-    "animal_ears",
-    "kemonomimi",
+]
 
+
+# =========================================================
+# ANIME FANDOMS
+# =========================================================
+
+ANIME_FANDOMS = [
+
+    # Naruto
     "naruto",
     "naruto_shippuden",
+
+    # One Piece
     "one_piece",
+
+    # Bleach
     "bleach",
 
+    # Dragon Ball
     "dragon_ball",
     "dragon_ball_z",
     "dragon_ball_super",
 
+    # My Hero Academia
     "my_hero_academia",
+
+    # Jujutsu Kaisen
     "jujutsu_kaisen",
+
+    # Demon Slayer
     "kimetsu_no_yaiba",
+
+    # Chainsaw Man
     "chainsaw_man",
+
+    # Attack on Titan
     "shingeki_no_kyojin",
 
+    # Sword Art Online
     "sword_art_online",
+
+    # Re:Zero
+    "re_zero_kara_hajimeru_isekai_seikatsu",
+
+    # KonoSuba
     "konosuba",
+
+    # Spy x Family
     "spy_x_family",
+
+    # One Punch Man
     "one_punch_man",
 
+    # Mob Psycho
     "mob_psycho_100",
+
+    # Fullmetal Alchemist
     "fullmetal_alchemist",
+
+    # Hunter x Hunter
     "hunter_x_hunter",
 
+    # JoJo
     "jojo_no_kimyou_na_bouken",
+
+    # Evangelion
     "neon_genesis_evangelion",
+
+    # Cowboy Bebop
     "cowboy_bebop",
 
+    # Code Geass
     "code_geass",
+
+    # Death Note
     "death_note",
+
+    # Fairy Tail
     "fairy_tail",
+
+    # Black Clover
     "black_clover",
 
+    # Tokyo Ghoul
     "tokyo_ghoul",
+
+    # Blue Lock
     "blue_lock",
+
+    # Haikyuu
     "haikyuu",
 
+    # Frieren
     "sousou_no_frieren",
+
+    # Oshi no Ko
     "oshi_no_ko",
+
+    # Bocchi
     "bocchi_the_rock",
 
+    # Kaguya
+    "kaguya-sama_wa_kokurasetai",
+
+    # Horimiya
     "horimiya",
 
+    # Toradora
+    "toradora",
+
+    # Sailor Moon
+    "sailor_moon",
+
+    # Cardcaptor Sakura
+    "cardcaptor_sakura",
+
+    # Madoka
+    "mahou_shoujo_madoka_magica",
+
+    # Fate
+    "fate/stay_night",
+    "fate/grand_order",
+
+    # Love Live
+    "love_live!",
+
+    # Idolmaster
+    "the_idolm@ster",
+
+    # Revue Starlight
+    "shoujo_kageki_revue_starlight",
+
+    # Violet Evergarden
+    "violet_evergarden",
+
+    # Mushoku Tensei
+    "mushoku_tensei",
+
+    # Overlord
+    "overlord",
+
+    # That Time I Got Reincarnated as a Slime
+    "tensei_shitara_slime_datta_ken",
+
+    # No Game No Life
+    "no_game_no_life",
+
+    # DanMachi
+    "dungeon_ni_deai_wo_motomeru_no_wa_machigatteiru_darou_ka",
+
+    # Date A Live
+    "date_a_live",
+
+    # Quintessential Quintuplets
+    "5-toubun_no_hanayome",
+
+    # Nagatoro
+    "ijiranaide_nagatoro-san",
+
+    # Komi
+    "komi-san_wa_komyushou_desu",
+
+    # Dress-Up Darling
+    "sono_bisque_doll_wa_koi_wo_suru",
+
+    # Rent-a-Girlfriend
+    "kanojo_okarishimasu",
+
+    # Spy Family
+    "spy_x_family",
+
+    # Lycoris Recoil
+    "lycoris_recoil",
+
+    # Frieren
+    "sousou_no_frieren",
+
+    # Apothecary Diaries
+    "kusuriya_no_hitorigoto",
+
+    # My Dress-Up Darling
+    "sono_bisque_doll_wa_koi_wo_suru",
+
+    # Vocaloid
     "vocaloid",
     "hatsune_miku",
     "megurine_luka",
+    "kagamine_rin",
+    "kagamine_len",
     "kasane_teto",
 
+    # Hololive
     "hololive",
+
+    # Nijisanji
     "nijisanji",
 
-    "cat_ears",
-    "fox_ears",
-    "bunny_ears",
+    # Touhou
+    "touhou",
 
-    "magic",
-    "knight",
-    "samurai",
-    "ninja",
-    "vampire",
-    "witch",
-    "dragon",
+    # Kemono Friends
+    "kemono_friends",
 
-    "cyberpunk",
-    "steampunk",
-    "mecha",
-    "robot",
-
-    "beach",
-    "cityscape",
-    "night",
-    "sunset",
+    # General
+    "anime",
 ]
 
 
-def get_danbooru_anime():
+# =========================================================
+# ANIME GETTER
+# =========================================================
 
-    tags_list = (
-        DANBOORU_ANIME_TAGS[:]
-    )
+def get_danbooru_anime():
+    attempts = []
+
+    # -----------------------------------------------------
+    # Основной вариант:
+    #
+    # rating:e + female tag
+    #
+    # -----------------------------------------------------
+
+    for female in FEMALE_TAGS:
+        attempts.append(
+            female
+        )
+
+    # -----------------------------------------------------
+    # Фандомы
+    #
+    # rating:e + fandom
+    # -----------------------------------------------------
+
+    for fandom in ANIME_FANDOMS:
+        attempts.append(
+            fandom
+        )
+
+    # -----------------------------------------------------
+    # Перемешиваем
+    # -----------------------------------------------------
 
     random.shuffle(
-        tags_list
+        attempts
     )
+
+    attempts = attempts[
+        :DANBOORU_MAX_ATTEMPTS
+    ]
 
     last_error = None
 
-    attempts = min(
-        DANBOORU_MAX_ATTEMPTS,
-        len(tags_list),
-    )
-
-    for tag in tags_list[
-        :attempts
-    ]:
-
+    for tag in attempts:
         try:
-
             result = (
                 get_random_danbooru(
                     tag,
@@ -624,7 +811,6 @@ def get_danbooru_anime():
             return result
 
         except Exception as error:
-
             last_error = error
 
             print(
@@ -633,33 +819,30 @@ def get_danbooru_anime():
                 f"{error}"
             )
 
-    fallback_queries = [
-        "anime",
-        "solo",
+    # -----------------------------------------------------
+    # Последний fallback
+    # -----------------------------------------------------
+
+    fallback = [
         "1girl",
-        "1boy",
-        "scenery",
         "2girls",
-        "lesbians",
+        "multiple_girls",
+        "anime",
     ]
 
-    for tag in fallback_queries:
-
+    for tag in fallback:
         try:
-
             return get_random_danbooru(
                 tag,
                 "Danbooru Anime",
             )
 
         except Exception as error:
-
             last_error = error
 
     raise RuntimeError(
         "Danbooru Anime: "
-        "не удалось найти новый "
-        "SAFE пост"
+        "не удалось найти SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -669,15 +852,36 @@ def get_danbooru_anime():
 
 
 # =========================================================
-# DANBOORU GAMES
+# GAMES FEMALE TAGS
 # =========================================================
 
-DANBOORU_GAME_TAGS = [
+GAME_FEMALE_TAGS = [
+    "1girl",
+    "2girls",
+    "3girls",
+    "multiple_girls",
+]
+
+
+# =========================================================
+# GAME FANDOMS
+# =========================================================
+
+GAME_FANDOMS = [
+
+    # -----------------------------------------------------
+    # HOYOVERSE
+    # -----------------------------------------------------
 
     "genshin_impact",
     "honkai_star_rail",
     "honkai_impact_3rd",
     "zenless_zone_zero",
+    "tears_of_themis",
+
+    # -----------------------------------------------------
+    # NINTENDO
+    # -----------------------------------------------------
 
     "pokemon",
     "super_mario",
@@ -688,13 +892,28 @@ DANBOORU_GAME_TAGS = [
     "kirby",
     "metroid",
 
+    # -----------------------------------------------------
+    # RPG
+    # -----------------------------------------------------
+
     "final_fantasy",
     "final_fantasy_vii",
     "final_fantasy_xiv",
     "persona",
     "persona_5",
+    "shin_megami_tensei",
     "nier_automata",
+    "nier_reincarnation",
+    "dragon_quest",
     "kingdom_hearts",
+    "octopath_traveler",
+    "baldurs_gate_3",
+    "divinity_original_sin",
+    "pathfinder",
+
+    # -----------------------------------------------------
+    # SOULS
+    # -----------------------------------------------------
 
     "elden_ring",
     "dark_souls",
@@ -705,12 +924,20 @@ DANBOORU_GAME_TAGS = [
     "bayonetta",
     "monster_hunter",
 
+    # -----------------------------------------------------
+    # FIGHTING
+    # -----------------------------------------------------
+
     "street_fighter",
     "tekken",
     "guilty_gear",
     "mortal_kombat",
     "king_of_fighters",
     "soulcalibur",
+
+    # -----------------------------------------------------
+    # SHOOTERS
+    # -----------------------------------------------------
 
     "overwatch",
     "valorant",
@@ -721,15 +948,31 @@ DANBOORU_GAME_TAGS = [
     "doom",
     "quake",
     "borderlands",
+    "team_fortress_2",
+    "counter-strike",
+
+    # -----------------------------------------------------
+    # MOBA
+    # -----------------------------------------------------
 
     "league_of_legends",
     "dota_2",
     "heroes_of_the_storm",
 
+    # -----------------------------------------------------
+    # HORROR
+    # -----------------------------------------------------
+
     "resident_evil",
     "silent_hill",
     "fatal_frame",
     "dead_by_daylight",
+    "five_nights_at_freddys",
+    "fnaf",
+
+    # -----------------------------------------------------
+    # SURVIVAL
+    # -----------------------------------------------------
 
     "minecraft",
     "terraria",
@@ -737,67 +980,99 @@ DANBOORU_GAME_TAGS = [
     "dont_starve",
     "subnautica",
     "valheim",
+    "rust",
+    "ark_survival_evolved",
+
+    # -----------------------------------------------------
+    # SCI-FI
+    # -----------------------------------------------------
 
     "cyberpunk_2077",
     "fallout",
     "starfield",
     "mass_effect",
     "warframe",
+    "starcraft",
+
+    # -----------------------------------------------------
+    # RPG / ADVENTURE
+    # -----------------------------------------------------
 
     "the_witcher",
     "skyrim",
     "the_elder_scrolls",
     "dragon_age",
+    "tales_of_series",
+    "xenoblade_chronicles",
+
+    # -----------------------------------------------------
+    # INDIE
+    # -----------------------------------------------------
 
     "undertale",
     "deltarune",
     "omori",
     "hollow_knight",
     "cuphead",
+    "hotline_miami",
+    "risk_of_rain",
     "hades",
+    "hades_ii",
+
+    # -----------------------------------------------------
+    # OTHER
+    # -----------------------------------------------------
 
     "portal",
     "half-life",
     "sonic_the_hedgehog",
     "ace_attorney",
     "danganronpa",
-
     "project_sekai",
     "blue_archive",
     "arknights",
     "azur_lane",
     "girls_frontline",
     "nikke",
+    "punishing_gray_raven",
 
-    "game",
+    # -----------------------------------------------------
+    # GENERAL
+    # -----------------------------------------------------
+
     "video_games",
     "game_character",
+    "game_art",
 ]
 
 
-def get_danbooru_games():
+# =========================================================
+# GAME GETTER
+# =========================================================
 
-    tags_list = (
-        DANBOORU_GAME_TAGS[:]
-    )
+def get_danbooru_games():
+    attempts = []
+
+    # Женские запросы
+    for tag in GAME_FEMALE_TAGS:
+        attempts.append(tag)
+
+    # Игровые фандомы
+    for fandom in GAME_FANDOMS:
+        attempts.append(fandom)
 
     random.shuffle(
-        tags_list
+        attempts
     )
+
+    attempts = attempts[
+        :DANBOORU_MAX_ATTEMPTS
+    ]
 
     last_error = None
 
-    attempts = min(
-        DANBOORU_MAX_ATTEMPTS,
-        len(tags_list),
-    )
-
-    for tag in tags_list[
-        :attempts
-    ]:
-
+    for tag in attempts:
         try:
-
             result = (
                 get_random_danbooru(
                     tag,
@@ -807,14 +1082,12 @@ def get_danbooru_games():
 
             print(
                 "[Danbooru Games] "
-                "Новый SAFE игровой "
-                "пост найден"
+                "Новый SAFE пост найден"
             )
 
             return result
 
         except Exception as error:
-
             last_error = error
 
             print(
@@ -823,29 +1096,26 @@ def get_danbooru_games():
                 f"{error}"
             )
 
-    fallback_queries = [
-        "game",
+    fallback = [
+        "1girl",
+        "2girls",
+        "multiple_girls",
         "video_games",
-        "game_character",
     ]
 
-    for tag in fallback_queries:
-
+    for tag in fallback:
         try:
-
             return get_random_danbooru(
                 tag,
                 "Danbooru Games",
             )
 
         except Exception as error:
-
             last_error = error
 
     raise RuntimeError(
         "Danbooru Games: "
-        "не удалось найти новый "
-        "SAFE игровой пост"
+        "не удалось найти SAFE пост"
         + (
             f": {last_error}"
             if last_error
@@ -859,7 +1129,6 @@ def get_danbooru_games():
 # =========================================================
 
 def download_image(image_url):
-
     response = requests.get(
         image_url,
         headers=DEFAULT_HEADERS,
@@ -883,19 +1152,15 @@ def download_image(image_url):
     )
 
     if content_length:
-
         try:
-
             if (
                 int(content_length)
                 > MAX_IMAGE_SIZE
             ):
-
                 response.close()
 
                 raise RuntimeError(
-                    "Изображение "
-                    "больше 8 MB"
+                    "Изображение больше 8 MB"
                 )
 
         except ValueError:
@@ -906,29 +1171,25 @@ def download_image(image_url):
     total = 0
 
     try:
-
         for chunk in response.iter_content(
             chunk_size=64 * 1024
         ):
-
             if not chunk:
                 continue
 
             total += len(chunk)
 
-            if total > MAX_IMAGE_SIZE:
-
+            if (
+                total
+                > MAX_IMAGE_SIZE
+            ):
                 raise RuntimeError(
-                    "Изображение "
-                    "больше 8 MB"
+                    "Изображение больше 8 MB"
                 )
 
-            chunks.append(
-                chunk
-            )
+            chunks.append(chunk)
 
     finally:
-
         response.close()
 
     content = b"".join(
@@ -940,23 +1201,18 @@ def download_image(image_url):
     )
 
     if "png" in content_type_lower:
-
         extension = "png"
 
     elif "webp" in content_type_lower:
-
         extension = "webp"
 
     elif "gif" in content_type_lower:
-
         extension = "gif"
 
     elif "jpeg" in content_type_lower:
-
         extension = "jpg"
 
     else:
-
         extension = "jpg"
 
     filename = (
@@ -971,13 +1227,12 @@ def download_image(image_url):
 
 
 # =========================================================
-# DANBOORU TAGS FOR DISCORD
+# DISCORD TAGS
 # =========================================================
 
 def format_danbooru_tags(
-    tag_string,
+    tag_string
 ):
-
     if not tag_string:
         return ""
 
@@ -1007,13 +1262,11 @@ def format_danbooru_tags(
 # =========================================================
 
 def send_to_discord(image):
-
     source = image["source"]
 
     image_url = image["url"]
 
     webhook_map = {
-
         "Waifu.im": (
             WAIFU_WEBHOOK_URL,
             "🌸 Anime",
@@ -1031,7 +1284,6 @@ def send_to_discord(image):
     }
 
     if source not in webhook_map:
-
         raise RuntimeError(
             f"Неизвестный источник: "
             f"{source}"
@@ -1042,7 +1294,6 @@ def send_to_discord(image):
     )
 
     if not webhook_url:
-
         raise RuntimeError(
             f"Webhook для {source} "
             "не настроен"
@@ -1057,7 +1308,6 @@ def send_to_discord(image):
     )
 
     if DISCORD_SPOILER:
-
         filename = (
             f"SPOILER_{filename}"
         )
@@ -1070,7 +1320,6 @@ def send_to_discord(image):
         "Danbooru Anime",
         "Danbooru Games",
     ):
-
         tags = format_danbooru_tags(
             image.get(
                 "tags",
@@ -1079,7 +1328,6 @@ def send_to_discord(image):
         )
 
         if tags:
-
             lines.append(
                 f"🏷️ Теги: {tags}"
             )
@@ -1128,7 +1376,6 @@ def send_to_discord(image):
     )
 
     if not response.ok:
-
         print(
             "[Discord] Ответ: "
             f"{response.text[:1000]}"
@@ -1148,16 +1395,14 @@ def send_to_discord(image):
 
 
 # =========================================================
-# PUBLISH SOURCE
+# PUBLISH
 # =========================================================
 
 def publish_source(
     name,
     getter,
 ):
-
     try:
-
         image = getter()
 
         send_to_discord(
@@ -1176,7 +1421,6 @@ def publish_source(
         }
 
     except Exception as error:
-
         print(
             f"[{name}] "
             f"ОШИБКА: {error}"
@@ -1195,7 +1439,6 @@ def publish_source(
 
 @app.route("/post")
 def post_image():
-
     print(
         "======================================================="
     )
@@ -1208,19 +1451,17 @@ def post_image():
         "======================================================="
     )
 
-    sources = []
+    results = []
 
     # -----------------------------------------------------
     # WAIFU
     # -----------------------------------------------------
 
     if WAIFU_WEBHOOK_URL:
-
-        sources.append(
-            (
+        results.append(
+            publish_source(
                 "Waifu.im",
                 get_random_waifu,
-                WAIFU_POSTS,
             )
         )
 
@@ -1233,17 +1474,19 @@ def post_image():
         and DANBOORU_USERNAME
         and DANBOORU_API_KEY
     ):
-
-        sources.append(
-            (
+        results.append(
+            publish_source(
                 "Danbooru Anime",
                 get_danbooru_anime,
-                DANBOORU_ANIME_POSTS,
             )
         )
 
     # -----------------------------------------------------
     # DANBOORU GAMES
+    # -----------------------------------------------------
+    #
+    # Публикуем 2 раза.
+    #
     # -----------------------------------------------------
 
     if (
@@ -1251,58 +1494,32 @@ def post_image():
         and DANBOORU_USERNAME
         and DANBOORU_API_KEY
     ):
-
-        sources.append(
-            (
-                "Danbooru Games",
-                get_danbooru_games,
-                DANBOORU_GAMES_POSTS,
+        for game_index in range(
+            GAMES_POST_COUNT
+        ):
+            print(
+                "[Danbooru Games] "
+                f"Публикация "
+                f"{game_index + 1}/"
+                f"{GAMES_POST_COUNT}"
             )
-        )
 
-    if not sources:
+            results.append(
+                publish_source(
+                    "Danbooru Games",
+                    get_danbooru_games,
+                )
+            )
 
+    # -----------------------------------------------------
+    # RESULTS
+    # -----------------------------------------------------
+
+    if not results:
         return Response(
             "No sources configured",
             status=500,
         )
-
-    results = []
-
-    # =====================================================
-    # ПУБЛИКАЦИЯ
-    # =====================================================
-
-    for (
-        name,
-        getter,
-        posts_count,
-    ) in sources:
-
-        print(
-            f"[{name}] "
-            f"Планируется постов: "
-            f"{posts_count}"
-        )
-
-        for number in range(
-            posts_count
-        ):
-
-            print(
-                f"[{name}] "
-                f"Пост {number + 1}/"
-                f"{posts_count}"
-            )
-
-            result = publish_source(
-                name,
-                getter,
-            )
-
-            results.append(
-                result
-            )
 
     successful = sum(
         1
@@ -1334,9 +1551,7 @@ def post_image():
     )
 
     for result in results:
-
         if not result["success"]:
-
             print(
                 f"POST: "
                 f"{result['source']}: "
@@ -1361,13 +1576,10 @@ def post_image():
 
 @app.route("/status")
 def status():
-
     return {
-
         "status": "online",
 
         "sources": {
-
             "waifu": bool(
                 WAIFU_WEBHOOK_URL
             ),
@@ -1385,36 +1597,36 @@ def status():
             ),
         },
 
-        "posts_per_run": {
-
-            "waifu": WAIFU_POSTS,
-
-            "danbooru_anime":
-                DANBOORU_ANIME_POSTS,
-
-            "danbooru_games":
-                DANBOORU_GAMES_POSTS,
-        },
-
-        "danbooru": {
-
-            "max_query_tags": 2,
-
+        "settings": {
             "safe_only": True,
 
-            "explicit_queries": False,
-        },
+            "allowed_rating": "s",
 
-        "settings": {
+            "female_tags": [
+                "1girl",
+                "2girls",
+                "3girls",
+                "4girls",
+                "multiple_girls",
+            ],
 
-            "discord_spoiler":
-                DISCORD_SPOILER,
+            "excluded_tags": (
+                get_exclude_tags()
+            ),
 
-            "max_attempts":
-                DANBOORU_MAX_ATTEMPTS,
+            "games_posts_per_request": (
+                GAMES_POST_COUNT
+            ),
 
-            "memory_size":
-                MAX_MEMORY,
+            "max_attempts": (
+                DANBOORU_MAX_ATTEMPTS
+            ),
+
+            "memory_size": (
+                MAX_MEMORY
+            ),
+
+            "danbooru_max_tags": 2,
         },
     }
 
@@ -1425,7 +1637,6 @@ def status():
 
 @app.route("/ping")
 def ping():
-
     return Response(
         "OK",
         status=200,
@@ -1438,7 +1649,6 @@ def ping():
 
 @app.route("/")
 def home():
-
     return Response(
         "Game Poster is running.",
         status=200,
@@ -1450,7 +1660,6 @@ def home():
 # =========================================================
 
 if __name__ == "__main__":
-
     port = int(
         os.environ.get(
             "PORT",
