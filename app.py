@@ -639,6 +639,8 @@ def get_danbooru_anime():
         "1girl",
         "1boy",
         "scenery",
+        "2girls",
+        "lesbians",
     ]
 
     for tag in fallback_queries:
