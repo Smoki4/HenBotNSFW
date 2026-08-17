@@ -158,7 +158,7 @@ def get_random_waifu():
             response = requests.get(
                 "https://api.waifu.im/images",
                 params={
-                    "IsNsfw": "False",
+                    "IsNsfw": "True",
                     "OrderBy": "Random",
                     "PageSize": 1,
                 },
