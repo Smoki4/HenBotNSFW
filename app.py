@@ -1,4 +1,3 @@
-
 import os
 import random
 import threading
@@ -23,8 +22,6 @@ DANBOORU_WEBHOOK_URL = os.environ.get(
     "DISCORD_WEBHOOK_DANBOORU"
 )
 
-# Можно оставить старое имя переменной Render.
-# Теперь этот webhook используется для Danbooru Games.
 DANBOORU_GAMES_WEBHOOK_URL = (
     os.environ.get(
         "DISCORD_WEBHOOK_DANBOORU_GAMES"
@@ -56,29 +53,17 @@ DANBOORU_API = (
 # SETTINGS
 # =========================================================
 
-# Discord spoiler
 DISCORD_SPOILER = True
 
-# Максимальный размер файла Discord.
 MAX_IMAGE_SIZE = 8 * 1024 * 1024
 
-# Сколько запросов максимум пробовать
-# при поиске Danbooru.
 DANBOORU_MAX_ATTEMPTS = 20
 
-# Сколько ID помнить в памяти.
 MAX_MEMORY = 1500
 
 
 # =========================================================
 # НЕЖЕЛАТЕЛЬНЫЕ ТЕГИ
-# =========================================================
-#
-# Эти теги автоматически добавляются
-# как отрицательные Danbooru-теги.
-#
-# Например:
-# gore -> -gore
 # =========================================================
 
 DANBOORU_EXCLUDE_TAGS = [
@@ -213,13 +198,65 @@ def danbooru_wait():
 
 
 # =========================================================
+# DANBOORU QUERY
+# =========================================================
+#
+# ВАЖНО:
+#
+# В твоих списках остаётся:
+#
+#     rating:explicit
+#
+# Мы его НЕ удаляем и НЕ меняем в списках.
+#
+# Только непосредственно перед отправкой
+# запроса к Danbooru API:
+#
+#     rating:explicit
+#
+# превращается в:
+#
+#     rating:e
+#
+# Это нужно для синтаксиса API.
+# =========================================================
+
+def prepare_danbooru_api_tags(tags):
+    if not tags:
+        return ""
+
+    tags = str(tags).strip()
+
+    # API-синтаксис rating.
+    #
+    # Пользовательские списки при этом
+    # остаются с rating:explicit.
+    tags = tags.replace(
+        "rating:explicit",
+        "rating:e",
+    )
+
+    tags = tags.replace(
+        "rating:safe",
+        "rating:s",
+    )
+
+    tags = tags.replace(
+        "rating:questionable",
+        "rating:q",
+    )
+
+    return tags
+
+
+# =========================================================
 # WAIFU.IM
 # =========================================================
 
 def get_random_waifu():
     print(
         "[Waifu.im] "
-        "Получаем SAFE изображение..."
+        "Получаем изображение..."
     )
 
     for attempt in range(5):
@@ -233,6 +270,11 @@ def get_random_waifu():
                 },
                 headers=DEFAULT_HEADERS,
                 timeout=30,
+            )
+
+            print(
+                "[Waifu.im] HTTP: "
+                f"{response.status_code}"
             )
 
             response.raise_for_status()
@@ -270,7 +312,7 @@ def get_random_waifu():
     raise RuntimeError(
         "Waifu.im: "
         "не удалось получить "
-        "SAFE изображение"
+        "изображение"
     )
 
 
@@ -298,6 +340,11 @@ def get_random_danbooru(
         get_exclude_tags()
     )
 
+    # -----------------------------------------------------
+    # Пользовательский запрос.
+    # Здесь explicit остаётся.
+    # -----------------------------------------------------
+
     final_tags = (
         f"{base_tags} "
         f"{' '.join(exclude_tags)}"
@@ -308,13 +355,28 @@ def get_random_danbooru(
         f"Запрос: {final_tags}"
     )
 
+    # -----------------------------------------------------
+    # Запрос, который реально пойдёт в API.
+    # -----------------------------------------------------
+
+    api_tags = (
+        prepare_danbooru_api_tags(
+            final_tags
+        )
+    )
+
+    print(
+        f"[{source_name}] "
+        f"API tags: {api_tags}"
+    )
+
     danbooru_wait()
 
     response = requests.get(
         f"{DANBOORU_API}/posts.json",
         params={
             "limit": 100,
-            "tags": final_tags,
+            "tags": api_tags,
         },
         auth=(
             DANBOORU_USERNAME,
@@ -330,15 +392,63 @@ def get_random_danbooru(
         f"{response.status_code}"
     )
 
-    response.raise_for_status()
+    print(
+        f"[{source_name}] "
+        f"URL: "
+        f"{response.url}"
+    )
 
-    data = response.json()
+    # -----------------------------------------------------
+    # ВАЖНО:
+    # Если Danbooru опять даст 422,
+    # теперь в Render Logs будет видно
+    # реальное сообщение API.
+    # -----------------------------------------------------
+
+    if not response.ok:
+        print(
+            f"[{source_name}] "
+            f"BODY: "
+            f"{response.text[:2000]}"
+        )
+
+        raise RuntimeError(
+            f"Danbooru HTTP "
+            f"{response.status_code}: "
+            f"{response.text[:500]}"
+        )
+
+    try:
+        data = response.json()
+
+    except Exception as error:
+        print(
+            f"[{source_name}] "
+            f"JSON ERROR: {error}"
+        )
+
+        print(
+            f"[{source_name}] "
+            f"BODY: "
+            f"{response.text[:2000]}"
+        )
+
+        raise RuntimeError(
+            "Danbooru вернул "
+            "некорректный JSON"
+        )
 
     if not isinstance(data, list):
         raise RuntimeError(
             f"{source_name}: "
             "некорректный ответ API"
         )
+
+    print(
+        f"[{source_name}] "
+        f"Получено постов: "
+        f"{len(data)}"
+    )
 
     candidates = []
 
@@ -397,6 +507,12 @@ def get_random_danbooru(
                 "tags": tag_string,
             }
         )
+
+    print(
+        f"[{source_name}] "
+        f"Подходящих SAFE постов: "
+        f"{len(candidates)}"
+    )
 
     if not candidates:
         raise RuntimeError(
@@ -619,7 +735,7 @@ def get_danbooru_anime():
             )
 
     # -----------------------------------------------------
-    # Fallback
+    # FALLBACK
     # -----------------------------------------------------
 
     fallback_queries = [
@@ -657,20 +773,14 @@ def get_danbooru_anime():
 # =========================================================
 
 DANBOORU_GAME_TAGS = [
-    # -----------------------------------------------------
     # HOYOVERSE
-    # -----------------------------------------------------
-
     "rating:explicit genshin_impact",
     "rating:explicit honkai_star_rail",
     "rating:explicit honkai_impact_3rd",
     "rating:explicit zenless_zone_zero",
     "rating:explicit tears_of_themis",
 
-    # -----------------------------------------------------
     # POKEMON / NINTENDO
-    # -----------------------------------------------------
-
     "rating:explicit pokemon",
     "rating:explicit super_mario",
     "rating:explicit the_legend_of_zelda",
@@ -680,10 +790,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit kirby",
     "rating:explicit metroid",
 
-    # -----------------------------------------------------
     # RPG
-    # -----------------------------------------------------
-
     "rating:explicit final_fantasy",
     "rating:explicit final_fantasy_vii",
     "rating:explicit final_fantasy_xiv",
@@ -699,10 +806,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit divinity_original_sin",
     "rating:explicit pathfinder",
 
-    # -----------------------------------------------------
     # SOULS / ACTION
-    # -----------------------------------------------------
-
     "rating:explicit elden_ring",
     "rating:explicit dark_souls",
     "rating:explicit bloodborne",
@@ -712,10 +816,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit bayonetta",
     "rating:explicit monster_hunter",
 
-    # -----------------------------------------------------
     # FIGHTING
-    # -----------------------------------------------------
-
     "rating:explicit street_fighter",
     "rating:explicit tekken",
     "rating:explicit guilty_gear",
@@ -723,10 +824,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit king_of_fighters",
     "rating:explicit soulcalibur",
 
-    # -----------------------------------------------------
     # SHOOTERS
-    # -----------------------------------------------------
-
     "rating:explicit overwatch",
     "rating:explicit valorant",
     "rating:explicit apex_legends",
@@ -739,18 +837,12 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit team_fortress_2",
     "rating:explicit counter-strike",
 
-    # -----------------------------------------------------
     # MOBA
-    # -----------------------------------------------------
-
     "rating:explicit league_of_legends",
     "rating:explicit dota_2",
     "rating:explicit heroes_of_the_storm",
 
-    # -----------------------------------------------------
     # HORROR
-    # -----------------------------------------------------
-
     "rating:explicit resident_evil",
     "rating:explicit silent_hill",
     "rating:explicit fatal_frame",
@@ -758,10 +850,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit five_nights_at_freddys",
     "rating:explicit fnaf",
 
-    # -----------------------------------------------------
-    # SURVIVAL / SANDBOX
-    # -----------------------------------------------------
-
+    # SURVIVAL
     "rating:explicit minecraft",
     "rating:explicit terraria",
     "rating:explicit stardew_valley",
@@ -771,10 +860,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit rust",
     "rating:explicit ark_survival_evolved",
 
-    # -----------------------------------------------------
     # SCI-FI
-    # -----------------------------------------------------
-
     "rating:explicit cyberpunk_2077",
     "rating:explicit fallout",
     "rating:explicit starfield",
@@ -782,10 +868,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit warframe",
     "rating:explicit starcraft",
 
-    # -----------------------------------------------------
     # RPG / ADVENTURE
-    # -----------------------------------------------------
-
     "rating:explicit the_witcher",
     "rating:explicit skyrim",
     "rating:explicit the_elder_scrolls",
@@ -793,10 +876,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit tales_of_series",
     "rating:explicit xenoblade_chronicles",
 
-    # -----------------------------------------------------
     # INDIE
-    # -----------------------------------------------------
-
     "rating:explicit undertale",
     "rating:explicit deltarune",
     "rating:explicit omori",
@@ -807,10 +887,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit hades",
     "rating:explicit hades_ii",
 
-    # -----------------------------------------------------
     # OTHER
-    # -----------------------------------------------------
-
     "rating:explicit portal",
     "rating:explicit half-life",
     "rating:explicit sonic_the_hedgehog",
@@ -824,10 +901,7 @@ DANBOORU_GAME_TAGS = [
     "rating:explicit nikke",
     "rating:explicit punishing_gray_raven",
 
-    # -----------------------------------------------------
-    # Общие игровые теги
-    # -----------------------------------------------------
-
+    # ОБЩИЕ ИГРОВЫЕ
     "rating:explicit game",
     "rating:explicit video_games",
     "rating:explicit game_character",
@@ -879,7 +953,7 @@ def get_danbooru_games():
             )
 
     # -----------------------------------------------------
-    # Fallback
+    # FALLBACK
     # -----------------------------------------------------
 
     fallback_queries = [
@@ -1026,8 +1100,6 @@ def format_danbooru_tags(
 
     tags = tag_string.split()
 
-    # Убираем rating:explicit и прочие
-    # технические rating-теги.
     tags = [
         tag
         for tag in tags
@@ -1036,9 +1108,6 @@ def format_danbooru_tags(
         )
     ]
 
-    # Максимум 30 тегов,
-    # чтобы сообщение Discord
-    # не получилось огромным.
     tags = tags[:30]
 
     if not tags:
@@ -1100,26 +1169,14 @@ def send_to_discord(image):
         image_url
     )
 
-    # -----------------------------------------------------
-    # DISCORD SPOILER
-    # -----------------------------------------------------
-
     if DISCORD_SPOILER:
         filename = (
             f"SPOILER_{filename}"
         )
 
-    # -----------------------------------------------------
-    # MESSAGE
-    # -----------------------------------------------------
-
     lines = [
         title
     ]
-
-    # -----------------------------------------------------
-    # TAGS
-    # -----------------------------------------------------
 
     if source in (
         "Danbooru Anime",
@@ -1454,4 +1511,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
     )
-
