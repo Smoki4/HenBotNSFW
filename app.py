@@ -39,6 +39,9 @@ DANBOORU_API_KEY = os.environ.get(
     "DANBOORU_API_KEY"
 )
 
+PINTEREST_ACCESS_TOKEN = os.environ.get( 
+    "PINTEREST_ACCESS_TOKEN"
+)
 
 # =========================================================
 # API
