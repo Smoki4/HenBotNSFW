@@ -1581,7 +1581,11 @@ def post_image():
 def status():
     return {
         "status": "online",
-
+"pinterest": { 
+    "token_configured": bool(
+        PINTEREST_ACCESS_TOKEN 
+        ) 
+      },
         "sources": {
             "waifu": bool(
                 WAIFU_WEBHOOK_URL
