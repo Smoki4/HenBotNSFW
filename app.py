@@ -44,28 +44,19 @@ DANBOORU_API_KEY = os.environ.get(
 # SETTINGS
 # =========================================================
 
-# Discord
 DISCORD_MAX_RETRIES = 4
 
-# Минимальное время между POST в Discord.
 DISCORD_SEND_DELAY = 6.0
 
-# Дополнительный случайный интервал.
 DISCORD_JITTER_MIN = 0.5
 DISCORD_JITTER_MAX = 2.0
 
-
-# Danbooru
 DANBOORU_SEND_DELAY = 2.0
 
-
-# Image
 MAX_IMAGE_SIZE = 19 * 1024 * 1024
 
 DISCORD_SPOILER = True
 
-
-# Memory
 MAX_MEMORY = 3000
 
 
@@ -95,16 +86,14 @@ HTTP = requests.Session()
 
 DEFAULT_HEADERS = {
     "User-Agent": (
-        "GamePoster/3.0 "
-        "(https://render.com)"
+        "GamePoster/4.0"
     ),
     "Accept": "*/*",
 }
 
-
 DANBOORU_HEADERS = {
     "User-Agent": (
-        "GamePoster/3.0 "
+        "GamePoster/4.0 "
         f"(user {DANBOORU_USERNAME or 'unknown'})"
     ),
     "Accept": "application/json",
@@ -112,55 +101,37 @@ DANBOORU_HEADERS = {
 
 
 # =========================================================
-# GLOBAL STATE
+# LOCKS
 # =========================================================
-
-# ---------------------------------------------------------
-# Publication lock
-#
-# Защищает один Python process.
-# На Render всё равно рекомендуется 1 instance / 1 worker.
-# ---------------------------------------------------------
 
 PUBLICATION_LOCK = threading.Lock()
 
-
-# ---------------------------------------------------------
-# Discord rate lock
-# ---------------------------------------------------------
-
 DISCORD_LOCK = threading.Lock()
-
-LAST_DISCORD_SEND = 0.0
-
-
-# ---------------------------------------------------------
-# Danbooru rate lock
-# ---------------------------------------------------------
 
 DANBOORU_LOCK = threading.Lock()
 
-LAST_DANBOORU_REQUEST = 0.0
-
-
-# ---------------------------------------------------------
-# Used IDs
-# ---------------------------------------------------------
-
-DANBOORU_USED_IDS = set()
-
 DANBOORU_MEMORY_LOCK = threading.Lock()
 
-
-# ---------------------------------------------------------
-# Current publication information
-# ---------------------------------------------------------
-
 CURRENT_RUN_LOCK = threading.Lock()
+
+OUTGOING_IP_LOCK = threading.Lock()
+
+
+# =========================================================
+# GLOBAL STATE
+# =========================================================
+
+LAST_DISCORD_SEND = 0.0
+
+LAST_DANBOORU_REQUEST = 0.0
+
+DANBOORU_USED_IDS = set()
 
 CURRENT_RUN_ID = None
 
 CURRENT_RUN_STARTED = None
+
+OUTGOING_IP = None
 
 
 # =========================================================
@@ -195,10 +166,9 @@ def remember_id(post_id):
             post_id
         )
 
-        while (
-            len(DANBOORU_USED_IDS)
-            > MAX_MEMORY
-        ):
+        while len(
+            DANBOORU_USED_IDS
+        ) > MAX_MEMORY:
 
             old_id = next(
                 iter(DANBOORU_USED_IDS)
@@ -223,7 +193,46 @@ def was_used(post_id):
 
 
 # =========================================================
-# DANBOORU RATE LIMIT
+# OUTGOING IP
+# =========================================================
+
+def get_outgoing_ip():
+
+    global OUTGOING_IP
+
+    with OUTGOING_IP_LOCK:
+
+        if OUTGOING_IP is not None:
+            return OUTGOING_IP
+
+        try:
+
+            response = HTTP.get(
+                "https://api.ipify.org",
+                timeout=10,
+            )
+
+            response.raise_for_status()
+
+            OUTGOING_IP = (
+                response.text.strip()
+            )
+
+        except Exception as error:
+
+            print(
+                "[DEBUG] "
+                f"Unable to determine IP: "
+                f"{error}"
+            )
+
+            OUTGOING_IP = "unknown"
+
+        return OUTGOING_IP
+
+
+# =========================================================
+# DANBOORU WAIT
 # =========================================================
 
 def danbooru_wait():
@@ -256,7 +265,7 @@ def danbooru_wait():
 
 
 # =========================================================
-# DISCORD RATE LIMIT
+# DISCORD WAIT
 # =========================================================
 
 def discord_wait():
@@ -298,49 +307,6 @@ def discord_wait():
 
 
 # =========================================================
-# RENDER DEBUG
-# =========================================================
-
-OUTGOING_IP = None
-
-OUTGOING_IP_LOCK = threading.Lock()
-
-
-def get_outgoing_ip():
-
-    global OUTGOING_IP
-
-    with OUTGOING_IP_LOCK:
-
-        if OUTGOING_IP is not None:
-            return OUTGOING_IP
-
-        try:
-
-            response = HTTP.get(
-                "https://api.ipify.org",
-                timeout=10,
-            )
-
-            response.raise_for_status()
-
-            OUTGOING_IP = (
-                response.text.strip()
-            )
-
-        except Exception as error:
-
-            print(
-                "[DEBUG] IP error:",
-                error,
-            )
-
-            OUTGOING_IP = "unknown"
-
-        return OUTGOING_IP
-
-
-# =========================================================
 # WAIFU.IM
 # =========================================================
 
@@ -348,7 +314,8 @@ def get_random_waifu(run_id):
 
     print(
         f"[{run_id}] "
-        "[Waifu.im] получение изображения"
+        "[Waifu.im] "
+        "Requesting image..."
     )
 
     for attempt in range(5):
@@ -367,7 +334,7 @@ def get_random_waifu(run_id):
 
             print(
                 f"[{run_id}] "
-                f"[Waifu.im] HTTP "
+                "[Waifu.im] HTTP "
                 f"{response.status_code}"
             )
 
@@ -384,7 +351,7 @@ def get_random_waifu(run_id):
 
                 raise RuntimeError(
                     "Waifu.im returned "
-                    "empty items"
+                    "no images"
                 )
 
             item = items[0]
@@ -396,8 +363,8 @@ def get_random_waifu(run_id):
             if not image_url:
 
                 raise RuntimeError(
-                    "Waifu.im image URL "
-                    "is missing"
+                    "Waifu.im returned "
+                    "no image URL"
                 )
 
             return {
@@ -410,8 +377,8 @@ def get_random_waifu(run_id):
 
             print(
                 f"[{run_id}] "
-                f"[Waifu.im] attempt "
-                f"{attempt + 1}: "
+                "[Waifu.im] "
+                f"Attempt {attempt + 1}: "
                 f"{error}"
             )
 
@@ -441,20 +408,20 @@ def get_random_danbooru(
 
         raise RuntimeError(
             "DANBOORU_USERNAME "
-            "not configured"
+            "is not configured"
         )
 
     if not DANBOORU_API_KEY:
 
         raise RuntimeError(
             "DANBOORU_API_KEY "
-            "not configured"
+            "is not configured"
         )
 
     print(
         f"[{run_id}] "
         f"[{source_name}] "
-        f"tags={tags}"
+        f"Tags: {tags}"
     )
 
     danbooru_wait()
@@ -490,7 +457,7 @@ def get_random_danbooru(
 
         raise RuntimeError(
             f"{source_name}: "
-            "invalid API response"
+            "Invalid API response"
         )
 
     candidates = []
@@ -549,7 +516,7 @@ def get_random_danbooru(
 
         raise RuntimeError(
             f"{source_name}: "
-            "no new images found"
+            "No new images found"
         )
 
     selected = random.choice(
@@ -563,7 +530,7 @@ def get_random_danbooru(
     print(
         f"[{run_id}] "
         f"[{source_name}] "
-        f"selected post "
+        f"Selected post "
         f"{selected['post_id']}"
     )
 
@@ -682,7 +649,8 @@ def download_image(
 
     print(
         f"[{run_id}] "
-        f"[Image] download"
+        "[Image] "
+        "Downloading..."
     )
 
     response = HTTP.get(
@@ -690,6 +658,12 @@ def download_image(
         headers=DEFAULT_HEADERS,
         timeout=60,
         stream=True,
+    )
+
+    print(
+        f"[{run_id}] "
+        "[Image] HTTP "
+        f"{response.status_code}"
     )
 
     response.raise_for_status()
@@ -711,16 +685,15 @@ def download_image(
 
         try:
 
-            size = int(
-                content_length
-            )
-
-            if size > MAX_IMAGE_SIZE:
+            if (
+                int(content_length)
+                > MAX_IMAGE_SIZE
+            ):
 
                 response.close()
 
                 raise RuntimeError(
-                    "Image exceeds "
+                    "Image is larger than "
                     f"{MAX_IMAGE_SIZE / 1024 / 1024:.0f} MB"
                 )
 
@@ -746,11 +719,13 @@ def download_image(
             if total > MAX_IMAGE_SIZE:
 
                 raise RuntimeError(
-                    "Image exceeds "
+                    "Image exceeded "
                     f"{MAX_IMAGE_SIZE / 1024 / 1024:.0f} MB"
                 )
 
-            chunks.append(chunk)
+            chunks.append(
+                chunk
+            )
 
     finally:
 
@@ -802,21 +777,8 @@ def download_image(
 
 
 # =========================================================
-# DISCORD RESPONSE ANALYSIS
+# CLOUDFLARE DETECTION
 # =========================================================
-
-def get_response_body(
-    response,
-):
-
-    try:
-
-        return response.json()
-
-    except Exception:
-
-        return None
-
 
 def is_cloudflare_response(
     response,
@@ -847,36 +809,36 @@ def is_cloudflare_response(
         "access denied",
         "used cloudflare",
         "cf-ray",
+        "attention required",
     )
 
     return any(
-        indicator in body
-        for indicator in indicators
+        item in body
+        for item in indicators
     )
 
 
 # =========================================================
-# DISCORD RETRY DELAY
+# RETRY DELAY
 # =========================================================
 
-def get_retry_after(
+def get_retry_delay(
     response,
     attempt,
 ):
 
-    # Header
-    header_value = (
+    retry_after = (
         response.headers.get(
             "Retry-After"
         )
     )
 
-    if header_value:
+    if retry_after:
 
         try:
 
             return max(
-                float(header_value),
+                float(retry_after),
                 1.0,
             )
 
@@ -887,37 +849,30 @@ def get_retry_after(
 
             pass
 
-    # JSON body
-    body = get_response_body(
-        response
-    )
+    try:
 
-    if isinstance(
-        body,
-        dict,
-    ):
+        body = response.json()
 
-        value = body.get(
-            "retry_after"
-        )
+        if isinstance(
+            body,
+            dict,
+        ):
 
-        if value is not None:
+            retry_after = body.get(
+                "retry_after"
+            )
 
-            try:
+            if retry_after is not None:
 
                 return max(
-                    float(value),
+                    float(retry_after),
                     1.0,
                 )
 
-            except (
-                TypeError,
-                ValueError,
-            ):
+    except Exception:
 
-                pass
+        pass
 
-    # Fallback
     return min(
         5.0 * (2 ** attempt),
         120.0,
@@ -925,7 +880,117 @@ def get_retry_after(
 
 
 # =========================================================
-# DISCORD POST
+# FULL CLOUDFLARE DEBUG
+# =========================================================
+
+def print_cloudflare_debug(
+    response,
+    run_id,
+    source_name,
+):
+
+    print()
+    print(
+        "======================================================="
+    )
+
+    print(
+        f"[{run_id}] "
+        f"[{source_name}] "
+        "CLOUDFLARE DEBUG"
+    )
+
+    print(
+        "-------------------------------------------------------"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"Status: "
+        f"{response.status_code}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"URL: "
+        f"{response.url}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"Reason: "
+        f"{response.reason}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"Content-Type: "
+        f"{response.headers.get('Content-Type')}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"Server: "
+        f"{response.headers.get('Server')}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"CF-Ray: "
+        f"{response.headers.get('CF-Ray')}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"CF-Cache-Status: "
+        f"{response.headers.get('CF-Cache-Status')}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"Retry-After: "
+        f"{response.headers.get('Retry-After')}"
+    )
+
+    print(
+        f"[{run_id}] "
+        f"Location: "
+        f"{response.headers.get('Location')}"
+    )
+
+    print(
+        f"[{run_id}] "
+        "ALL HEADERS:"
+    )
+
+    for key, value in response.headers.items():
+
+        print(
+            f"[{run_id}] "
+            f"  {key}: {value}"
+        )
+
+    print(
+        "-------------------------------------------------------"
+    )
+
+    print(
+        f"[{run_id}] "
+        "RESPONSE BODY:"
+    )
+
+    print(
+        response.text[:5000]
+    )
+
+    print(
+        "======================================================="
+    )
+    print()
+
+
+# =========================================================
+# DISCORD REQUEST
 # =========================================================
 
 def discord_request(
@@ -965,7 +1030,7 @@ def discord_request(
             print(
                 f"[{run_id}] "
                 f"[{source_name}] "
-                f"network error: "
+                f"Network error: "
                 f"{error}"
             )
 
@@ -980,7 +1045,9 @@ def discord_request(
                 )
 
             wait_time = min(
-                10.0 * (2 ** (attempt - 1)),
+                10.0 * (
+                    2 ** (attempt - 1)
+                ),
                 120.0,
             )
 
@@ -991,7 +1058,7 @@ def discord_request(
 
             print(
                 f"[{run_id}] "
-                f"retry in "
+                f"Retry in "
                 f"{wait_time:.1f}s"
             )
 
@@ -1002,55 +1069,27 @@ def discord_request(
             continue
 
         # -------------------------------------------------
-        # Response information
+        # BASIC RESPONSE INFO
         # -------------------------------------------------
-
-        content_type = (
-            response.headers.get(
-                "Content-Type",
-                "",
-            )
-        )
-
-        retry_after = (
-            response.headers.get(
-                "Retry-After"
-            )
-        )
-
-        cf_ray = (
-            response.headers.get(
-                "CF-Ray"
-            )
-        )
 
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            f"HTTP {response.status_code}"
+            f"Discord HTTP "
+            f"{response.status_code}"
         )
 
         print(
             f"[{run_id}] "
             f"Content-Type: "
-            f"{content_type}"
+            f"{response.headers.get('Content-Type')}"
         )
 
-        if retry_after:
-
-            print(
-                f"[{run_id}] "
-                f"Retry-After: "
-                f"{retry_after}"
-            )
-
-        if cf_ray:
-
-            print(
-                f"[{run_id}] "
-                f"CF-Ray: "
-                f"{cf_ray}"
-            )
+        print(
+            f"[{run_id}] "
+            f"CF-Ray: "
+            f"{response.headers.get('CF-Ray')}"
+        )
 
         # -------------------------------------------------
         # SUCCESS
@@ -1064,7 +1103,7 @@ def discord_request(
             print(
                 f"[{run_id}] "
                 f"[{source_name}] "
-                "Discord SUCCESS"
+                "DISCORD SUCCESS"
             )
 
             return {
@@ -1080,14 +1119,10 @@ def discord_request(
             response
         ):
 
-            print(
-                f"[{run_id}] "
-                f"[{source_name}] "
-                "CLOUDFLARE BLOCK"
-            )
-
-            print(
-                response.text[:1000]
+            print_cloudflare_debug(
+                response,
+                run_id,
+                source_name,
             )
 
             raise RuntimeError(
@@ -1101,9 +1136,11 @@ def discord_request(
 
         if response.status_code == 429:
 
-            wait_time = get_retry_after(
-                response,
-                attempt - 1,
+            wait_time = (
+                get_retry_delay(
+                    response,
+                    attempt - 1,
+                )
             )
 
             wait_time += random.uniform(
@@ -1114,12 +1151,12 @@ def discord_request(
             print(
                 f"[{run_id}] "
                 f"[{source_name}] "
-                f"Discord 429"
+                "Discord 429"
             )
 
             print(
                 f"[{run_id}] "
-                f"waiting "
+                f"Retry after "
                 f"{wait_time:.1f}s"
             )
 
@@ -1141,11 +1178,11 @@ def discord_request(
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            "Discord error body:"
+            "DISCORD ERROR BODY:"
         )
 
         print(
-            response.text[:1500]
+            response.text[:3000]
         )
 
         raise RuntimeError(
@@ -1197,7 +1234,8 @@ def send_to_discord(
     if source not in webhook_map:
 
         raise RuntimeError(
-            f"Unknown source: {source}"
+            f"Unknown source: "
+            f"{source}"
         )
 
     webhook_url, message = (
@@ -1207,12 +1245,12 @@ def send_to_discord(
     if not webhook_url:
 
         raise RuntimeError(
-            f"Webhook missing "
+            f"Webhook not configured "
             f"for {source}"
         )
 
     # -----------------------------------------------------
-    # IMAGE
+    # DOWNLOAD
     # -----------------------------------------------------
 
     (
@@ -1227,7 +1265,7 @@ def send_to_discord(
     print(
         f"[{run_id}] "
         f"[{source}] "
-        f"image size="
+        f"Downloaded "
         f"{len(image_data) / 1024 / 1024:.2f} MB"
     )
 
@@ -1294,10 +1332,10 @@ def send_to_discord(
     }
 
     # -----------------------------------------------------
-    # DISCORD
+    # SEND
     # -----------------------------------------------------
 
-    result = discord_request(
+    return discord_request(
         webhook_url,
         data,
         files,
@@ -1305,11 +1343,9 @@ def send_to_discord(
         source,
     )
 
-    return result
-
 
 # =========================================================
-# PUBLISH ONE SOURCE
+# PUBLISH ONE
 # =========================================================
 
 def publish_one(
@@ -1320,6 +1356,7 @@ def publish_one(
 
     started = time.monotonic()
 
+    print()
     print(
         f"[{run_id}] "
         f"========== "
@@ -1328,19 +1365,11 @@ def publish_one(
 
     try:
 
-        # -------------------------------------------------
-        # GET IMAGE
-        # -------------------------------------------------
-
         image = getter(
             run_id
         )
 
-        # -------------------------------------------------
-        # SEND
-        # -------------------------------------------------
-
-        discord_result = send_to_discord(
+        result = send_to_discord(
             image,
             run_id,
         )
@@ -1350,10 +1379,17 @@ def publish_one(
             - started
         )
 
-        result = {
+        print(
+            f"[{run_id}] "
+            f"{source_name} "
+            f"SUCCESS "
+            f"({elapsed:.2f}s)"
+        )
+
+        return {
             "source": source_name,
             "success": True,
-            "status": discord_result.get(
+            "status": result.get(
                 "status"
             ),
             "error": None,
@@ -1363,15 +1399,6 @@ def publish_one(
             ),
         }
 
-        print(
-            f"[{run_id}] "
-            f"{source_name} "
-            f"SUCCESS "
-            f"({elapsed:.2f}s)"
-        )
-
-        return result
-
     except Exception as error:
 
         elapsed = (
@@ -1379,7 +1406,14 @@ def publish_one(
             - started
         )
 
-        result = {
+        print(
+            f"[{run_id}] "
+            f"{source_name} "
+            f"ERROR: "
+            f"{error}"
+        )
+
+        return {
             "source": source_name,
             "success": False,
             "status": None,
@@ -1389,15 +1423,6 @@ def publish_one(
                 2,
             ),
         }
-
-        print(
-            f"[{run_id}] "
-            f"{source_name} "
-            f"ERROR: "
-            f"{error}"
-        )
-
-        return result
 
     finally:
 
@@ -1409,7 +1434,7 @@ def publish_one(
 
 
 # =========================================================
-# SOURCE LIST
+# SOURCES
 # =========================================================
 
 def get_configured_sources():
@@ -1467,10 +1492,6 @@ def post_image():
     global CURRENT_RUN_ID
     global CURRENT_RUN_STARTED
 
-    # -----------------------------------------------------
-    # Generate run ID
-    # -----------------------------------------------------
-
     run_id = new_run_id()
 
     print()
@@ -1478,7 +1499,7 @@ def post_image():
         "======================================================="
     )
     print(
-        f"[{run_id}] POST REQUEST"
+        f"[{run_id}] POST START"
     )
     print(
         f"[{run_id}] PID={os.getpid()}"
@@ -1496,19 +1517,16 @@ def post_image():
     )
 
     # -----------------------------------------------------
-    # Lock
+    # LOCK
     # -----------------------------------------------------
 
-    acquired = PUBLICATION_LOCK.acquire(
+    if not PUBLICATION_LOCK.acquire(
         blocking=False
-    )
-
-    if not acquired:
+    ):
 
         print(
             f"[{run_id}] "
-            "ANOTHER PUBLICATION "
-            "IS ALREADY RUNNING"
+            "ANOTHER POST IS ALREADY RUNNING"
         )
 
         return jsonify(
@@ -1521,10 +1539,6 @@ def post_image():
                 ),
             }
         ), 200
-
-    # -----------------------------------------------------
-    # Current run
-    # -----------------------------------------------------
 
     with CURRENT_RUN_LOCK:
 
@@ -1540,14 +1554,10 @@ def post_image():
         # IP
         # -------------------------------------------------
 
-        outgoing_ip = (
-            get_outgoing_ip()
-        )
-
         print(
             f"[{run_id}] "
-            f"OUTGOING IP="
-            f"{outgoing_ip}"
+            f"Render outgoing IP="
+            f"{get_outgoing_ip()}"
         )
 
         # -------------------------------------------------
@@ -1560,51 +1570,38 @@ def post_image():
 
         print(
             f"[{run_id}] "
-            f"Configured sources="
+            f"Expected sources="
             f"{len(sources)}"
         )
 
-        for source_name, _ in sources:
+        for name, _ in sources:
 
             print(
                 f"[{run_id}] "
-                f"Source: "
-                f"{source_name}"
+                f"Configured: {name}"
             )
 
         if not sources:
-
-            print(
-                f"[{run_id}] "
-                "NO SOURCES CONFIGURED"
-            )
 
             return jsonify(
                 {
                     "status": "error",
                     "run_id": run_id,
+                    "expected_sources": 0,
+                    "processed": 0,
                     "successful": 0,
                     "errors": 0,
                     "results": [],
-                    "message": (
-                        "No sources configured"
-                    ),
                 }
             ), 500
 
         # -------------------------------------------------
-        # PROCESS SEQUENTIALLY
+        # SEQUENTIAL
         # -------------------------------------------------
 
         results = []
 
         for source_name, getter in sources:
-
-            print(
-                f"[{run_id}] "
-                f"Starting source "
-                f"{source_name}"
-            )
 
             result = publish_one(
                 source_name,
@@ -1616,18 +1613,12 @@ def post_image():
                 result
             )
 
-            print(
-                f"[{run_id}] "
-                f"RESULT "
-                f"{source_name}: "
-                f"{'SUCCESS' if result['success'] else 'ERROR'}"
-            )
-
             # -------------------------------------------------
-            # IMPORTANT:
+            # IMPORTANT
             #
-            # Если Cloudflare заблокировал Discord,
-            # прекращаем этот запуск.
+            # Если Cloudflare блокирует Discord,
+            # дальше бессмысленно пытаться отправлять
+            # остальные изображения в Discord.
             # -------------------------------------------------
 
             if (
@@ -1638,36 +1629,36 @@ def post_image():
                 )
             ):
 
+                print()
                 print(
                     f"[{run_id}] "
-                    "CLOUDFLARE BLOCK "
-                    "DETECTED."
+                    "CLOUDFLARE BLOCK DETECTED"
                 )
 
                 print(
                     f"[{run_id}] "
-                    "STOPPING remaining sources."
+                    "Stopping current POST."
                 )
 
                 break
 
         # -------------------------------------------------
-        # FINAL STATS
+        # STATS
         # -------------------------------------------------
 
         successful = sum(
             1
-            for result in results
-            if result["success"]
+            for item in results
+            if item["success"]
         )
 
         errors = sum(
             1
-            for result in results
-            if not result["success"]
+            for item in results
+            if not item["success"]
         )
 
-        total = len(
+        processed = len(
             results
         )
 
@@ -1676,7 +1667,15 @@ def post_image():
             "======================================================="
         )
         print(
-            f"[{run_id}] FINAL RESULT"
+            f"[{run_id}] FINAL"
+        )
+        print(
+            f"[{run_id}] "
+            f"expected_sources={len(sources)}"
+        )
+        print(
+            f"[{run_id}] "
+            f"processed={processed}"
         )
         print(
             f"[{run_id}] "
@@ -1686,55 +1685,36 @@ def post_image():
             f"[{run_id}] "
             f"errors={errors}"
         )
-        print(
-            f"[{run_id}] "
-            f"processed={total}"
-        )
-        print(
-            "-------------------------------------------------------"
-        )
 
-        for result in results:
-
-            status = (
-                "SUCCESS"
-                if result["success"]
-                else "ERROR"
-            )
+        for item in results:
 
             print(
                 f"[{run_id}] "
-                f"{result['source']}: "
-                f"{status} "
-                f"elapsed={result['elapsed']}s"
+                f"{item['source']} -> "
+                f"{'SUCCESS' if item['success'] else 'ERROR'}"
             )
 
-            if not result["success"]:
+            if item["error"]:
 
                 print(
                     f"[{run_id}] "
-                    f"ERROR DETAILS: "
-                    f"{result['error']}"
+                    f"  {item['error']}"
                 )
 
         print(
             "======================================================="
         )
 
-        # -------------------------------------------------
-        # RESPONSE
-        # -------------------------------------------------
-
         return jsonify(
             {
                 "status": "completed",
                 "run_id": run_id,
-                "successful": successful,
-                "errors": errors,
-                "processed": total,
                 "expected_sources": len(
                     sources
                 ),
+                "processed": processed,
+                "successful": successful,
+                "errors": errors,
                 "results": results,
             }
         ), 200
@@ -1771,10 +1751,6 @@ def status():
             CURRENT_RUN_ID
         )
 
-        started = (
-            CURRENT_RUN_STARTED
-        )
-
     sources = (
         get_configured_sources()
     )
@@ -1788,7 +1764,6 @@ def status():
                 current_run is not None
             ),
             "current_run_id": current_run,
-            "current_run_started": started,
             "configured_sources": [
                 name
                 for name, _ in sources
@@ -1850,7 +1825,7 @@ if __name__ == "__main__":
         "======================================================="
     )
     print(
-        "GAME POSTER 3.0"
+        "GAME POSTER 4.0"
     )
     print(
         f"PORT={port}"
