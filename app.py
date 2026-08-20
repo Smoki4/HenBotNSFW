@@ -356,6 +356,7 @@ def get_random_waifu(run_id):
                 params={
                     "OrderBy": "Random",
                     "PageSize": 1,
+                    "IsNsfw": "True",
                 },
                 headers=DEFAULT_HEADERS,
                 timeout=30,
