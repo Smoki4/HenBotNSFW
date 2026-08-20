@@ -383,59 +383,59 @@ def get_random_danbooru(
 
 DANBOORU_ANIME_TAGS = [
 
-    "rating:safe anime",
+    "rating:explicit anime",
 
-    "rating:safe 1girl",
+    "rating:explicit 1girl",
 
-    "rating:safe 1boy",
+    "rating:explicit 1boy",
 
-    "rating:safe solo",
+    "rating:explicit solo",
 
-    "rating:safe 2girls",
+    "rating:explicit 2girls",
 
-    "rating:safe scenery",
+    "rating:explicit scenery",
 
-    "rating:safe landscape",
+    "rating:explicit landscape",
 
-    "rating:safe fantasy",
+    "rating:explicit fantasy",
 
-    "rating:safe school_uniform",
+    "rating:explicit school_uniform",
 
-    "rating:safe animal_ears",
+    "rating:explicit animal_ears",
 
-    "rating:safe furry",
+    "rating:explicit furry",
 
-    "rating:safe vocaloid",
+    "rating:explicit vocaloid",
 
-    "rating:safe hatsune_miku",
+    "rating:explicit hatsune_miku",
 
-    "rating:safe megurine_luka",
+    "rating:explicit megurine_luka",
 
-    "rating:safe naruto",
+    "rating:explicit naruto",
 
-    "rating:safe one_piece",
+    "rating:explicit one_piece",
 
-    "rating:safe bleach",
+    "rating:explicit bleach",
 
-    "rating:safe re_zero",
+    "rating:explicit re_zero",
 
-    "rating:safe konosuba",
+    "rating:explicit konosuba",
 
-    "rating:safe genshin_impact",
+    "rating:explicit genshin_impact",
 
-    "rating:safe honkai_star_rail",
+    "rating:explicit honkai_star_rail",
 
-    "rating:safe zenless_zone_zero",
+    "rating:explicit zenless_zone_zero",
 
-    "rating:safe pokemon",
+    "rating:explicit pokemon",
 
-    "rating:safe persona",
+    "rating:explicit persona",
 
-    "rating:safe final_fantasy",
+    "rating:explicit final_fantasy",
 
-    "rating:safe cyberpunk_2077",
+    "rating:explicit cyberpunk_2077",
 
-    "rating:safe minecraft",
+    "rating:explicit minecraft",
 
 ]
 
@@ -458,65 +458,65 @@ def get_danbooru_anime():
 
 DANBOORU_GAME_TAGS = [
 
-    "rating:safe genshin_impact",
+    "rating:explicit genshin_impact",
 
-    "rating:safe honkai_star_rail",
+    "rating:explicit honkai_star_rail",
 
-    "rating:safe zenless_zone_zero",
+    "rating:explicit zenless_zone_zero",
 
-    "rating:safe minecraft",
+    "rating:explicit minecraft",
 
-    "rating:safe apex_legends",
+    "rating:explicit apex_legends",
 
-    "rating:safe overwatch",
+    "rating:explicit overwatch",
 
-    "rating:safe fortnite",
+    "rating:explicit fortnite",
 
-    "rating:safe pokemon",
+    "rating:explicit pokemon",
 
-    "rating:safe persona_5",
+    "rating:explicit persona_5",
 
-    "rating:safe cyberpunk_2077",
+    "rating:explicit cyberpunk_2077",
 
-    "rating:safe resident_evil",
+    "rating:explicit resident_evil",
 
-    "rating:safe nier_automata",
+    "rating:explicit nier_automata",
 
-    "rating:safe devil_may_cry",
+    "rating:explicit devil_may_cry",
 
-    "rating:safe final_fantasy",
+    "rating:explicit final_fantasy",
 
-    "rating:safe the_witcher",
+    "rating:explicit the_witcher",
 
-    "rating:safe elden_ring",
+    "rating:explicit elden_ring",
 
-    "rating:safe dark_souls",
+    "rating:explicit dark_souls",
 
-    "rating:safe mortal_kombat",
+    "rating:explicit mortal_kombat",
 
-    "rating:safe street_fighter",
+    "rating:explicit street_fighter",
 
-    "rating:safe tekken",
+    "rating:explicit tekken",
 
-    "rating:safe guilty_gear",
+    "rating:explicit guilty_gear",
 
-    "rating:safe skullgirls",
+    "rating:explicit skullgirls",
 
-    "rating:safe arknights",
+    "rating:explicit arknights",
 
-    "rating:safe wuthering_waves",
+    "rating:explicit wuthering_waves",
 
-    "rating:safe dead_by_daylight",
+    "rating:explicit dead_by_daylight",
 
-    "rating:safe dota_2",
+    "rating:explicit dota_2",
 
-    "rating:safe pubg",
+    "rating:explicit pubg",
 
-    "rating:safe team_fortress_2",
+    "rating:explicit team_fortress_2",
 
-    "rating:safe fallout",
+    "rating:explicit fallout",
 
-    "rating:safe warhammer_40k",
+    "rating:explicit warhammer_40k",
 
 ]
 
