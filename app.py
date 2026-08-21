@@ -50,13 +50,16 @@ DISCORD_MAX_RETRIES = 4
 # Минимальная пауза между Discord POST.
 DISCORD_SEND_DELAY = 6.0
 
-# Небольшой случайный интервал поверх основной задержки.
+# Случайная дополнительная задержка.
 DISCORD_JITTER_MIN = 0.5
 DISCORD_JITTER_MAX = 2.0
 
 
 # Danbooru
 DANBOORU_SEND_DELAY = 2.0
+
+# Сколько раз пробовать получить подходящий пост.
+DANBOORU_MAX_SELECTION_ATTEMPTS = 10
 
 
 # Максимальный размер изображения.
@@ -108,7 +111,7 @@ HTTP = requests.Session()
 
 DEFAULT_HEADERS = {
     "User-Agent": (
-        "GamePoster/5.0"
+        "GamePoster/5.1"
     ),
     "Accept": "*/*",
 }
@@ -116,7 +119,7 @@ DEFAULT_HEADERS = {
 
 DANBOORU_HEADERS = {
     "User-Agent": (
-        "GamePoster/5.0 "
+        "GamePoster/5.1 "
         f"(user {DANBOORU_USERNAME or 'unknown'})"
     ),
     "Accept": "application/json",
@@ -158,6 +161,223 @@ OUTGOING_IP = None
 
 
 # =========================================================
+# FORBIDDEN DANBOORU TAGS
+# =========================================================
+#
+# Эти теги никогда не должны доходить
+# до отправки в Discord.
+#
+# Проверка выполняется локально даже если
+# Danbooru API каким-то образом вернул пост.
+#
+
+FORBIDDEN_DANBOORU_TAGS = {
+
+    # -----------------------------------------------------
+    # GORE / BLOOD / EXTREME VIOLENCE
+    # -----------------------------------------------------
+
+    "gore",
+    "extreme_gore",
+    "blood",
+    "blood_splatter",
+    "blood_spatter",
+    "bloody",
+    "violent",
+    "violence",
+
+    "dismemberment",
+    "dismembered",
+    "decapitation",
+    "decapitated",
+    "amputation",
+    "amputee",
+
+    "disembowelment",
+    "disemboweled",
+    "evisceration",
+
+    "mutilation",
+    "mutilated",
+
+    "viscera",
+    "internal_organs",
+    "exposed_organs",
+    "exposed_brain",
+
+    "corpse",
+    "dead_body",
+    "dead_person",
+    "dead_animal",
+    "dead_boy",
+    "dead_girl",
+
+    "autopsy",
+    "execution",
+    "snuff",
+
+    # -----------------------------------------------------
+    # SELF HARM / SUICIDE
+    # -----------------------------------------------------
+
+    "suicide",
+    "suicidal",
+    "self_harm",
+    "self-injury",
+    "self_injury",
+    "cutting",
+    "wrist_cutting",
+
+    # -----------------------------------------------------
+    # TORTURE
+    # -----------------------------------------------------
+
+    "torture",
+    "tortured",
+    "torture_device",
+    "mutilation",
+
+    # -----------------------------------------------------
+    # SEXUAL VIOLENCE / ABUSE
+    # -----------------------------------------------------
+
+    "rape",
+    "raped",
+    "rape_scene",
+    "sexual_assault",
+    "molestation",
+    "molested",
+    "abuse",
+    "abused",
+    "forced",
+    "forced_sex",
+    "non-consensual",
+    "nonconsensual",
+
+    # -----------------------------------------------------
+    # INCEST
+    # -----------------------------------------------------
+
+    "incest",
+    "incestuous",
+
+    # -----------------------------------------------------
+    # EXTREME BODILY FLUIDS / WASTE
+    # -----------------------------------------------------
+
+    "scat",
+    "scat_play",
+    "coprophagia",
+    "coprophagy",
+
+    "feces",
+    "fecal",
+    "defecation",
+    "defecating",
+
+    "vomit",
+    "vomiting",
+    "vomit_on",
+
+    "urine",
+    "urination",
+    "pissing",
+    "pee",
+
+    # -----------------------------------------------------
+    # OTHER EXTREME CONTENT
+    # -----------------------------------------------------
+
+    "organ_removal",
+    "organ_extraction",
+    "skinless",
+    "flayed",
+    "flaying",
+    "skinning",
+
+    "burned_alive",
+    "burning_person",
+
+    "crucifixion",
+    "impalement",
+    "impaled",
+
+    "hanging",
+    "hanged",
+
+    "electrocution",
+
+    "cannibalism",
+    "cannibal",
+
+    "zombie",
+}
+
+
+# =========================================================
+# DANBOORU API EXCLUSION TAGS
+# =========================================================
+#
+# Дополнительный фильтр на стороне Danbooru.
+#
+# Локальная проверка выше всё равно остаётся
+# обязательной второй защитой.
+#
+
+DANBOORU_EXCLUSION_TAGS = {
+
+    "gore",
+    "extreme_gore",
+    "blood",
+    "dismemberment",
+    "decapitation",
+    "amputation",
+    "disembowelment",
+    "evisceration",
+    "viscera",
+    "internal_organs",
+    "exposed_organs",
+    "corpse",
+    "dead_body",
+    "death",
+
+    "suicide",
+    "self_harm",
+    "cutting",
+
+    "rape",
+    "sexual_assault",
+    "molestation",
+    "forced",
+
+    "incest",
+
+    "scat",
+    "coprophagia",
+    "feces",
+    "defecation",
+
+    "vomit",
+    "vomiting",
+
+    "urine",
+    "urination",
+    "pissing",
+
+    "torture",
+    "mutilation",
+    "snuff",
+
+    "cannibalism",
+    "flaying",
+    "skinning",
+    "impalement",
+    "crucifixion",
+    "execution",
+}
+
+
+# =========================================================
 # HELPERS
 # =========================================================
 
@@ -171,6 +391,87 @@ def now_string():
     return time.strftime(
         "%Y-%m-%d %H:%M:%S UTC",
         time.gmtime(),
+    )
+
+
+# =========================================================
+# FORBIDDEN TAG CHECK
+# =========================================================
+
+def normalize_tags(raw_tags):
+
+    if not isinstance(
+        raw_tags,
+        str,
+    ):
+
+        return set()
+
+    return {
+        tag.strip().lower()
+        for tag in raw_tags.split()
+        if tag.strip()
+    }
+
+
+def get_forbidden_tags(post):
+
+    raw_tags = post.get(
+        "tag_string",
+        "",
+    )
+
+    tags = normalize_tags(
+        raw_tags
+    )
+
+    return (
+        tags
+        & FORBIDDEN_DANBOORU_TAGS
+    )
+
+
+def has_forbidden_tag(post):
+
+    forbidden = get_forbidden_tags(
+        post
+    )
+
+    if forbidden:
+
+        print(
+            "[Danbooru] "
+            f"Post ID={post.get('id')} "
+            "REJECTED."
+        )
+
+        print(
+            "[Danbooru] "
+            "Forbidden tags: "
+            f"{sorted(forbidden)}"
+        )
+
+        return True
+
+    return False
+
+
+# =========================================================
+# BUILD DANBOORU QUERY
+# =========================================================
+
+def build_danbooru_query(
+    base_tags,
+):
+
+    exclusions = " ".join(
+        f"-{tag}"
+        for tag in DANBOORU_EXCLUSION_TAGS
+    )
+
+    return (
+        f"{base_tags} "
+        f"{exclusions}"
     )
 
 
@@ -205,8 +506,8 @@ def get_outgoing_ip():
 
             print(
                 "[DEBUG] "
-                f"Unable to determine outgoing IP: "
-                f"{error}"
+                "Unable to determine "
+                f"outgoing IP: {error}"
             )
 
             OUTGOING_IP = "unknown"
@@ -224,7 +525,9 @@ def remember_id(post_id):
 
         return
 
-    post_id = str(post_id)
+    post_id = str(
+        post_id
+    )
 
     with DANBOORU_MEMORY_LOCK:
 
@@ -347,7 +650,10 @@ def get_random_waifu(run_id):
         "Requesting image..."
     )
 
-    for attempt in range(1, 6):
+    for attempt in range(
+        1,
+        6,
+    ):
 
         try:
 
@@ -448,125 +754,340 @@ def get_random_danbooru(
             "is not configured"
         )
 
+    # Добавляем серверные исключения.
+    query = build_danbooru_query(
+        tags
+    )
+
     print(
         f"[{run_id}] "
         f"[{source_name}] "
-        f"Query: {tags}"
-    )
-
-    danbooru_wait()
-
-    response = HTTP.get(
-        f"{DANBOORU_API}/posts.json",
-        params={
-            "limit": 100,
-            "tags": tags,
-        },
-        auth=(
-            DANBOORU_USERNAME,
-            DANBOORU_API_KEY,
-        ),
-        headers=DANBOORU_HEADERS,
-        timeout=30,
+        f"Base query: {tags}"
     )
 
     print(
         f"[{run_id}] "
-        f"[{source_name}] HTTP "
-        f"{response.status_code}"
+        f"[{source_name}] "
+        f"Safe query: {query}"
     )
 
-    response.raise_for_status()
-
-    data = response.json()
-
-    if not isinstance(
-        data,
-        list,
+    for selection_attempt in range(
+        1,
+        DANBOORU_MAX_SELECTION_ATTEMPTS + 1,
     ):
 
-        raise RuntimeError(
-            f"{source_name}: "
-            "invalid API response"
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            "Selection attempt "
+            f"{selection_attempt}/"
+            f"{DANBOORU_MAX_SELECTION_ATTEMPTS}"
         )
 
-    candidates = []
+        danbooru_wait()
 
-    for post in data:
+        try:
 
-        post_id = post.get(
-            "id"
-        )
-
-        if was_used(post_id):
-
-            continue
-
-        image_url = (
-            post.get(
-                "large_file_url"
+            response = HTTP.get(
+                f"{DANBOORU_API}/posts.json",
+                params={
+                    "limit": 100,
+                    "tags": query,
+                },
+                auth=(
+                    DANBOORU_USERNAME,
+                    DANBOORU_API_KEY,
+                ),
+                headers=DANBOORU_HEADERS,
+                timeout=30,
             )
-            or post.get(
-                "file_url"
+
+        except requests.RequestException as error:
+
+            print(
+                f"[{run_id}] "
+                f"[{source_name}] "
+                f"Network error: {error}"
             )
+
+            if (
+                selection_attempt
+                < DANBOORU_MAX_SELECTION_ATTEMPTS
+            ):
+
+                time.sleep(3)
+
+                continue
+
+            raise RuntimeError(
+                f"{source_name}: "
+                f"Danbooru network error: "
+                f"{error}"
+            )
+
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] HTTP "
+            f"{response.status_code}"
         )
 
-        if not image_url:
+        try:
 
-            continue
+            response.raise_for_status()
 
-        lowered = (
-            image_url.lower()
-        )
+        except requests.HTTPError as error:
 
-        if not any(
-            ext in lowered
-            for ext in (
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".gif",
+            print(
+                f"[{run_id}] "
+                f"[{source_name}] "
+                f"Danbooru HTTP error: "
+                f"{error}"
             )
+
+            if (
+                selection_attempt
+                < DANBOORU_MAX_SELECTION_ATTEMPTS
+            ):
+
+                time.sleep(3)
+
+                continue
+
+            raise
+
+        try:
+
+            data = response.json()
+
+        except ValueError as error:
+
+            raise RuntimeError(
+                f"{source_name}: "
+                f"invalid JSON response: "
+                f"{error}"
+            )
+
+        if not isinstance(
+            data,
+            list,
         ):
 
-            continue
+            raise RuntimeError(
+                f"{source_name}: "
+                "invalid API response"
+            )
 
-        candidates.append(
-            {
-                "url": image_url,
-                "source": source_name,
-                "post_id": post_id,
-                "tags": post.get(
-                    "tag_string",
-                    "",
-                ),
-            }
+        candidates = []
+
+        rejected_forbidden = 0
+
+        rejected_used = 0
+
+        rejected_no_url = 0
+
+        rejected_extension = 0
+
+        for post in data:
+
+            post_id = post.get(
+                "id"
+            )
+
+            # -------------------------------------------------
+            # USED POST
+            # -------------------------------------------------
+
+            if was_used(post_id):
+
+                rejected_used += 1
+
+                continue
+
+            # -------------------------------------------------
+            # FORBIDDEN CONTENT
+            # -------------------------------------------------
+
+            forbidden_tags = (
+                get_forbidden_tags(
+                    post
+                )
+            )
+
+            if forbidden_tags:
+
+                rejected_forbidden += 1
+
+                print(
+                    f"[{run_id}] "
+                    f"[{source_name}] "
+                    f"REJECTED ID={post_id}"
+                )
+
+                print(
+                    f"[{run_id}] "
+                    f"[{source_name}] "
+                    "Forbidden tags="
+                    f"{sorted(forbidden_tags)}"
+                )
+
+                # Запоминаем, чтобы не брать
+                # этот пост в будущем.
+                remember_id(
+                    post_id
+                )
+
+                continue
+
+            # -------------------------------------------------
+            # IMAGE URL
+            # -------------------------------------------------
+
+            image_url = (
+                post.get(
+                    "large_file_url"
+                )
+                or post.get(
+                    "file_url"
+                )
+            )
+
+            if not image_url:
+
+                rejected_no_url += 1
+
+                continue
+
+            # -------------------------------------------------
+            # EXTENSION
+            # -------------------------------------------------
+
+            lowered = (
+                image_url.lower()
+            )
+
+            if not any(
+                ext in lowered
+                for ext in (
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".webp",
+                    ".gif",
+                )
+            ):
+
+                rejected_extension += 1
+
+                continue
+
+            # -------------------------------------------------
+            # FINAL SAFETY CHECK
+            # -------------------------------------------------
+
+            # Повторная проверка перед добавлением
+            # в candidates.
+            if has_forbidden_tag(
+                post
+            ):
+
+                rejected_forbidden += 1
+
+                remember_id(
+                    post_id
+                )
+
+                continue
+
+            # -------------------------------------------------
+            # CANDIDATE
+            # -------------------------------------------------
+
+            candidates.append(
+                {
+                    "url": image_url,
+                    "source": source_name,
+                    "post_id": post_id,
+                    "tags": post.get(
+                        "tag_string",
+                        "",
+                    ),
+                }
+            )
+
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            f"Candidates={len(candidates)}"
         )
 
-    if not candidates:
-
-        raise RuntimeError(
-            f"{source_name}: "
-            "no unused images found"
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            f"Rejected forbidden="
+            f"{rejected_forbidden}"
         )
 
-    selected = random.choice(
-        candidates
-    )
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            f"Rejected used="
+            f"{rejected_used}"
+        )
 
-    remember_id(
-        selected["post_id"]
-    )
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            f"Rejected no URL="
+            f"{rejected_no_url}"
+        )
 
-    print(
-        f"[{run_id}] "
-        f"[{source_name}] "
-        f"Selected Danbooru ID="
-        f"{selected['post_id']}"
-    )
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            f"Rejected extension="
+            f"{rejected_extension}"
+        )
 
-    return selected
+        if candidates:
+
+            selected = random.choice(
+                candidates
+            )
+
+            remember_id(
+                selected["post_id"]
+            )
+
+            print(
+                f"[{run_id}] "
+                f"[{source_name}] "
+                "Selected Danbooru ID="
+                f"{selected['post_id']}"
+            )
+
+            return selected
+
+        print(
+            f"[{run_id}] "
+            f"[{source_name}] "
+            "No safe unused images "
+            "in current response."
+        )
+
+        if (
+            selection_attempt
+            < DANBOORU_MAX_SELECTION_ATTEMPTS
+        ):
+
+            time.sleep(1)
+
+    raise RuntimeError(
+        f"{source_name}: "
+        "no safe unused images found "
+        "after "
+        f"{DANBOORU_MAX_SELECTION_ATTEMPTS} "
+        "attempts"
+    )
 
 
 # =========================================================
@@ -1104,7 +1625,7 @@ def discord_request(
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            f"Discord attempt "
+            "Discord attempt "
             f"{attempt}/"
             f"{DISCORD_MAX_RETRIES}"
         )
@@ -1329,7 +1850,7 @@ def send_to_discord(
     print(
         f"[{run_id}] "
         f"[{source}] "
-        f"Image size="
+        "Image size="
         f"{len(image_data) / 1024 / 1024:.2f} MB"
     )
 
@@ -1569,7 +2090,7 @@ def post_image():
 
     print(
         f"[{run_id}] "
-        f"Outgoing IP="
+        "Outgoing IP="
         f"{get_outgoing_ip()}"
     )
 
@@ -1657,7 +2178,6 @@ def post_image():
 
         # -------------------------------------------------
         # DANBOORU GAMES
-        # TWO POSTS
         # -------------------------------------------------
 
         if (
@@ -1689,7 +2209,7 @@ def post_image():
 
         print(
             f"[{run_id}] "
-            f"Expected publications="
+            "Expected publications="
             f"{expected}"
         )
 
@@ -1740,14 +2260,6 @@ def post_image():
             results.append(
                 result
             )
-
-            # IMPORTANT:
-            #
-            # Не останавливаем весь POST
-            # после Cloudflare.
-            #
-            # Каждый webhook проверяется
-            # отдельно.
 
         # -------------------------------------------------
         # STATS
@@ -1823,7 +2335,7 @@ def post_image():
 
                 print(
                     f"[{run_id}] "
-                    f"  Post ID="
+                    "  Post ID="
                     f"{result['post_id']}"
                 )
 
@@ -1833,7 +2345,7 @@ def post_image():
 
                 print(
                     f"[{run_id}] "
-                    f"  Error="
+                    "  Error="
                     f"{result['error']}"
                 )
 
@@ -1941,6 +2453,9 @@ def status():
                 ),
             },
             "configured": configured,
+            "forbidden_tags_count": len(
+                FORBIDDEN_DANBOORU_TAGS
+            ),
         }
     )
 
@@ -1996,7 +2511,7 @@ if __name__ == "__main__":
     )
 
     print(
-        "GAME POSTER 5.0"
+        "GAME POSTER 5.1"
     )
 
     print(
@@ -2028,6 +2543,11 @@ if __name__ == "__main__":
     print(
         f"  TOTAL: "
         f"{WAIFU_POSTS + DANBOORU_ANIME_POSTS + DANBOORU_GAMES_POSTS}"
+    )
+
+    print(
+        f"  Forbidden Danbooru tags: "
+        f"{len(FORBIDDEN_DANBOORU_TAGS)}"
     )
 
     print(
