@@ -58,7 +58,9 @@ DISCORD_JITTER_MAX = 2.0
 # Danbooru
 DANBOORU_SEND_DELAY = 2.0
 
-# Сколько раз пробовать получить подходящий пост.
+# Сколько раз получать новый набор постов,
+# если текущие посты уже использованы
+# или содержат запрещённые теги.
 DANBOORU_MAX_SELECTION_ATTEMPTS = 10
 
 
@@ -111,7 +113,7 @@ HTTP = requests.Session()
 
 DEFAULT_HEADERS = {
     "User-Agent": (
-        "GamePoster/5.1"
+        "GamePoster/5.2"
     ),
     "Accept": "*/*",
 }
@@ -119,7 +121,7 @@ DEFAULT_HEADERS = {
 
 DANBOORU_HEADERS = {
     "User-Agent": (
-        "GamePoster/5.1 "
+        "GamePoster/5.2 "
         f"(user {DANBOORU_USERNAME or 'unknown'})"
     ),
     "Accept": "application/json",
@@ -164,17 +166,27 @@ OUTGOING_IP = None
 # FORBIDDEN DANBOORU TAGS
 # =========================================================
 #
-# Эти теги никогда не должны доходить
-# до отправки в Discord.
+# ВАЖНО:
 #
-# Проверка выполняется локально даже если
-# Danbooru API каким-то образом вернул пост.
+# Эти теги НЕ добавляются в Danbooru API query.
 #
+# Мы специально НЕ делаем:
+#
+#     -gore -blood -rape ...
+#
+# потому что это может приводить к HTTP 422.
+#
+# Вместо этого Danbooru возвращает посты,
+# а мы проверяем tag_string локально.
+#
+# Если найден хотя бы один запрещённый тег,
+# пост полностью отбрасывается.
+# =========================================================
 
 FORBIDDEN_DANBOORU_TAGS = {
 
     # -----------------------------------------------------
-    # GORE / BLOOD / EXTREME VIOLENCE
+    # GORE
     # -----------------------------------------------------
 
     "gore",
@@ -183,24 +195,22 @@ FORBIDDEN_DANBOORU_TAGS = {
     "blood_splatter",
     "blood_spatter",
     "bloody",
-    "violent",
-    "violence",
 
     "dismemberment",
     "dismembered",
+
     "decapitation",
     "decapitated",
+
     "amputation",
     "amputee",
 
     "disembowelment",
     "disemboweled",
+
     "evisceration",
-
-    "mutilation",
-    "mutilated",
-
     "viscera",
+
     "internal_organs",
     "exposed_organs",
     "exposed_brain",
@@ -209,12 +219,43 @@ FORBIDDEN_DANBOORU_TAGS = {
     "dead_body",
     "dead_person",
     "dead_animal",
-    "dead_boy",
-    "dead_girl",
 
-    "autopsy",
-    "execution",
+    "mutilation",
+    "mutilated",
+
+    "flaying",
+    "flayed",
+    "skinning",
+    "skinless",
+
+    "organ_removal",
+    "organ_extraction",
+
     "snuff",
+    "execution",
+
+    "impalement",
+    "impaled",
+
+    "crucifixion",
+
+    "burned_alive",
+    "burning_person",
+
+    "hanging",
+    "hanged",
+
+    "electrocution",
+
+    # -----------------------------------------------------
+    # VIOLENCE
+    # -----------------------------------------------------
+
+    "violent",
+    "violence",
+    "torture",
+    "tortured",
+    "torture_device",
 
     # -----------------------------------------------------
     # SELF HARM / SUICIDE
@@ -223,19 +264,10 @@ FORBIDDEN_DANBOORU_TAGS = {
     "suicide",
     "suicidal",
     "self_harm",
-    "self-injury",
     "self_injury",
+    "self-injury",
     "cutting",
     "wrist_cutting",
-
-    # -----------------------------------------------------
-    # TORTURE
-    # -----------------------------------------------------
-
-    "torture",
-    "tortured",
-    "torture_device",
-    "mutilation",
 
     # -----------------------------------------------------
     # SEXUAL VIOLENCE / ABUSE
@@ -244,15 +276,20 @@ FORBIDDEN_DANBOORU_TAGS = {
     "rape",
     "raped",
     "rape_scene",
+
     "sexual_assault",
+
     "molestation",
     "molested",
+
     "abuse",
     "abused",
+
     "forced",
     "forced_sex",
-    "non-consensual",
+
     "nonconsensual",
+    "non-consensual",
 
     # -----------------------------------------------------
     # INCEST
@@ -262,11 +299,12 @@ FORBIDDEN_DANBOORU_TAGS = {
     "incestuous",
 
     # -----------------------------------------------------
-    # EXTREME BODILY FLUIDS / WASTE
+    # SCAT / WASTE / BODILY FLUIDS
     # -----------------------------------------------------
 
     "scat",
     "scat_play",
+
     "coprophagia",
     "coprophagy",
 
@@ -285,95 +323,11 @@ FORBIDDEN_DANBOORU_TAGS = {
     "pee",
 
     # -----------------------------------------------------
-    # OTHER EXTREME CONTENT
+    # CANNIBALISM
     # -----------------------------------------------------
-
-    "organ_removal",
-    "organ_extraction",
-    "skinless",
-    "flayed",
-    "flaying",
-    "skinning",
-
-    "burned_alive",
-    "burning_person",
-
-    "crucifixion",
-    "impalement",
-    "impaled",
-
-    "hanging",
-    "hanged",
-
-    "electrocution",
 
     "cannibalism",
     "cannibal",
-
-    "zombie",
-}
-
-
-# =========================================================
-# DANBOORU API EXCLUSION TAGS
-# =========================================================
-#
-# Дополнительный фильтр на стороне Danbooru.
-#
-# Локальная проверка выше всё равно остаётся
-# обязательной второй защитой.
-#
-
-DANBOORU_EXCLUSION_TAGS = {
-
-    "gore",
-    "extreme_gore",
-    "blood",
-    "dismemberment",
-    "decapitation",
-    "amputation",
-    "disembowelment",
-    "evisceration",
-    "viscera",
-    "internal_organs",
-    "exposed_organs",
-    "corpse",
-    "dead_body",
-    "death",
-
-    "suicide",
-    "self_harm",
-    "cutting",
-
-    "rape",
-    "sexual_assault",
-    "molestation",
-    "forced",
-
-    "incest",
-
-    "scat",
-    "coprophagia",
-    "feces",
-    "defecation",
-
-    "vomit",
-    "vomiting",
-
-    "urine",
-    "urination",
-    "pissing",
-
-    "torture",
-    "mutilation",
-    "snuff",
-
-    "cannibalism",
-    "flaying",
-    "skinning",
-    "impalement",
-    "crucifixion",
-    "execution",
 }
 
 
@@ -395,7 +349,7 @@ def now_string():
 
 
 # =========================================================
-# FORBIDDEN TAG CHECK
+# TAG NORMALIZATION
 # =========================================================
 
 def normalize_tags(raw_tags):
@@ -414,6 +368,10 @@ def normalize_tags(raw_tags):
     }
 
 
+# =========================================================
+# FORBIDDEN TAG CHECK
+# =========================================================
+
 def get_forbidden_tags(post):
 
     raw_tags = post.get(
@@ -431,7 +389,11 @@ def get_forbidden_tags(post):
     )
 
 
-def has_forbidden_tag(post):
+def has_forbidden_tag(
+    post,
+    run_id=None,
+    source_name="Danbooru",
+):
 
     forbidden = get_forbidden_tags(
         post
@@ -439,14 +401,24 @@ def has_forbidden_tag(post):
 
     if forbidden:
 
+        prefix = ""
+
+        if run_id:
+
+            prefix = (
+                f"[{run_id}] "
+            )
+
         print(
-            "[Danbooru] "
-            f"Post ID={post.get('id')} "
-            "REJECTED."
+            f"{prefix}"
+            f"[{source_name}] "
+            f"REJECTED post "
+            f"ID={post.get('id')}"
         )
 
         print(
-            "[Danbooru] "
+            f"{prefix}"
+            f"[{source_name}] "
             "Forbidden tags: "
             f"{sorted(forbidden)}"
         )
@@ -454,25 +426,6 @@ def has_forbidden_tag(post):
         return True
 
     return False
-
-
-# =========================================================
-# BUILD DANBOORU QUERY
-# =========================================================
-
-def build_danbooru_query(
-    base_tags,
-):
-
-    exclusions = " ".join(
-        f"-{tag}"
-        for tag in DANBOORU_EXCLUSION_TAGS
-    )
-
-    return (
-        f"{base_tags} "
-        f"{exclusions}"
-    )
 
 
 # =========================================================
@@ -754,22 +707,26 @@ def get_random_danbooru(
             "is not configured"
         )
 
-    # Добавляем серверные исключения.
-    query = build_danbooru_query(
-        tags
-    )
-
     print(
         f"[{run_id}] "
         f"[{source_name}] "
-        f"Base query: {tags}"
+        f"Query: {tags}"
     )
 
-    print(
-        f"[{run_id}] "
-        f"[{source_name}] "
-        f"Safe query: {query}"
-    )
+    # -----------------------------------------------------
+    # IMPORTANT
+    #
+    # В API отправляем ТОЛЬКО исходный запрос.
+    #
+    # Никаких:
+    #
+    # -gore
+    # -blood
+    # -rape
+    # -...
+    #
+    # Запрещённые теги проверяются локально.
+    # -----------------------------------------------------
 
     for selection_attempt in range(
         1,
@@ -792,7 +749,7 @@ def get_random_danbooru(
                 f"{DANBOORU_API}/posts.json",
                 params={
                     "limit": 100,
-                    "tags": query,
+                    "tags": tags,
                 },
                 auth=(
                     DANBOORU_USERNAME,
@@ -821,7 +778,7 @@ def get_random_danbooru(
 
             raise RuntimeError(
                 f"{source_name}: "
-                f"Danbooru network error: "
+                "Danbooru network error: "
                 f"{error}"
             )
 
@@ -831,29 +788,50 @@ def get_random_danbooru(
             f"{response.status_code}"
         )
 
-        try:
+        # -------------------------------------------------
+        # 422
+        # -------------------------------------------------
 
-            response.raise_for_status()
-
-        except requests.HTTPError as error:
+        if response.status_code == 422:
 
             print(
                 f"[{run_id}] "
                 f"[{source_name}] "
-                f"Danbooru HTTP error: "
-                f"{error}"
+                "Danbooru rejected query "
+                "with HTTP 422."
             )
 
-            if (
-                selection_attempt
-                < DANBOORU_MAX_SELECTION_ATTEMPTS
-            ):
+            print(
+                f"[{run_id}] "
+                f"[{source_name}] "
+                f"Query: {tags}"
+            )
 
-                time.sleep(3)
+            print(
+                f"[{run_id}] "
+                f"[{source_name}] "
+                "Response:"
+            )
 
-                continue
+            print(
+                response.text[:3000]
+            )
 
-            raise
+            raise RuntimeError(
+                f"{source_name}: "
+                "Danbooru rejected "
+                "the query with HTTP 422"
+            )
+
+        # -------------------------------------------------
+        # OTHER HTTP ERRORS
+        # -------------------------------------------------
+
+        response.raise_for_status()
+
+        # -------------------------------------------------
+        # JSON
+        # -------------------------------------------------
 
         try:
 
@@ -863,7 +841,7 @@ def get_random_danbooru(
 
             raise RuntimeError(
                 f"{source_name}: "
-                f"invalid JSON response: "
+                "invalid JSON response: "
                 f"{error}"
             )
 
@@ -887,6 +865,10 @@ def get_random_danbooru(
 
         rejected_extension = 0
 
+        # -------------------------------------------------
+        # PROCESS POSTS
+        # -------------------------------------------------
+
         for post in data:
 
             post_id = post.get(
@@ -894,17 +876,19 @@ def get_random_danbooru(
             )
 
             # -------------------------------------------------
-            # USED POST
+            # USED
             # -------------------------------------------------
 
-            if was_used(post_id):
+            if was_used(
+                post_id
+            ):
 
                 rejected_used += 1
 
                 continue
 
             # -------------------------------------------------
-            # FORBIDDEN CONTENT
+            # FORBIDDEN TAGS
             # -------------------------------------------------
 
             forbidden_tags = (
@@ -930,8 +914,8 @@ def get_random_danbooru(
                     f"{sorted(forbidden_tags)}"
                 )
 
-                # Запоминаем, чтобы не брать
-                # этот пост в будущем.
+                # Запоминаем запрещённый ID,
+                # чтобы не использовать его снова.
                 remember_id(
                     post_id
                 )
@@ -958,7 +942,7 @@ def get_random_danbooru(
                 continue
 
             # -------------------------------------------------
-            # EXTENSION
+            # IMAGE EXTENSION
             # -------------------------------------------------
 
             lowered = (
@@ -984,10 +968,10 @@ def get_random_danbooru(
             # FINAL SAFETY CHECK
             # -------------------------------------------------
 
-            # Повторная проверка перед добавлением
-            # в candidates.
             if has_forbidden_tag(
-                post
+                post,
+                run_id,
+                source_name,
             ):
 
                 rejected_forbidden += 1
@@ -999,7 +983,7 @@ def get_random_danbooru(
                 continue
 
             # -------------------------------------------------
-            # CANDIDATE
+            # SAFE CANDIDATE
             # -------------------------------------------------
 
             candidates.append(
@@ -1014,6 +998,10 @@ def get_random_danbooru(
                 }
             )
 
+        # -------------------------------------------------
+        # DEBUG STATISTICS
+        # -------------------------------------------------
+
         print(
             f"[{run_id}] "
             f"[{source_name}] "
@@ -1023,30 +1011,30 @@ def get_random_danbooru(
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            f"Rejected forbidden="
-            f"{rejected_forbidden}"
+            f"Forbidden={rejected_forbidden}"
         )
 
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            f"Rejected used="
-            f"{rejected_used}"
+            f"Used={rejected_used}"
         )
 
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            f"Rejected no URL="
-            f"{rejected_no_url}"
+            f"No URL={rejected_no_url}"
         )
 
         print(
             f"[{run_id}] "
             f"[{source_name}] "
-            f"Rejected extension="
-            f"{rejected_extension}"
+            f"Bad extension={rejected_extension}"
         )
+
+        # -------------------------------------------------
+        # SAFE IMAGE FOUND
+        # -------------------------------------------------
 
         if candidates:
 
@@ -1061,17 +1049,21 @@ def get_random_danbooru(
             print(
                 f"[{run_id}] "
                 f"[{source_name}] "
-                "Selected Danbooru ID="
-                f"{selected['post_id']}"
+                "Selected SAFE Danbooru "
+                f"ID={selected['post_id']}"
             )
 
             return selected
+
+        # -------------------------------------------------
+        # NO SAFE IMAGE
+        # -------------------------------------------------
 
         print(
             f"[{run_id}] "
             f"[{source_name}] "
             "No safe unused images "
-            "in current response."
+            "found in current response."
         )
 
         if (
@@ -2511,7 +2503,7 @@ if __name__ == "__main__":
     )
 
     print(
-        "GAME POSTER 5.1"
+        "GAME POSTER 5.2"
     )
 
     print(
